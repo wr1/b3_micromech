@@ -1,0 +1,48 @@
+domain:
+  size: 1.0
+  mesh_resolution: [24, 24]
+
+periodic_tolerance: 1.0e-8
+
+materials:
+  - name: matrix
+    type: isotropic
+    youngs_modulus: 3.0e9
+    poisson_ratio: 0.35
+
+  - name: fibre
+    type: transverse_isotropic
+    e_l: 230.0e9
+    e_t: 15.0e9
+    g_lt: 15.0e9
+    nu_lt: 0.20
+    nu_tt: 0.30
+
+rve:
+  matrix_material: matrix
+  fibre_material: fibre
+  fibre_volume_fraction: 0.50
+
+solver:
+  cell_type: quadrilateral
+
+sweep:
+  vf:
+    linspace: [0.35, 0.65, 4]
+  E_m:
+    value: 3.0e9
+  nu_m:
+    value: 0.35
+  E_Lf:
+    value: 230.0e9
+  E_Tf:
+    value: 15.0e9
+  G_LTf:
+    value: 15.0e9
+  nu_LTf:
+    value: 0.20
+  G_TTf:
+    value: 6.0e9
+  mesh:
+    resolution: [24, 24]
+    cell_type: quadrilateral
