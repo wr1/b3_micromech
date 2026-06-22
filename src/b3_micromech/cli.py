@@ -6,6 +6,8 @@ import numpy as np
 from treeparse import argument, cli, command, option
 
 from b3_micromech.homogenize import homogenize, surrogate_features
+from b3_micromech.plot import render_all_figures
+from b3_micromech.postprocess import solve_all_loadcases
 from b3_micromech.problem import RVEProblem
 from b3_micromech.reference import mori_tanaka_cylinder
 from b3_micromech.sweep import sweep_to_file
@@ -41,7 +43,7 @@ def _reference_cmd(config: str) -> None:
             print(f"  {k} = {v:.4f}")
 
 
-def _solve_cmd(config: str, out: str) -> None:
+def _solve_cmd(config: str, out: str, plot: bool, plot_scale: float) -> None:
     problem = RVEProblem.from_yaml(config)
     result = homogenize(problem)
     C = result.effective_stiffness
@@ -60,6 +62,19 @@ def _solve_cmd(config: str, out: str) -> None:
         features=surrogate_features(problem),
     )
     print(f"wrote {out_dir / 'C_eff.npz'}")
+    if plot:
+        scale = None if plot_scale < 0 else plot_scale
+        _plot_cmd(config, str(out_dir / "plots"), scale)
+
+
+def _plot_cmd(config: str, out: str, scale: float) -> None:
+    problem = RVEProblem.from_yaml(config)
+    loadcases = solve_all_loadcases(problem)
+    plot_scale = None if scale < 0 else scale
+    paths = render_all_figures(loadcases, out, scale=plot_scale)
+    print(f"Plots written to {out}/")
+    for name, path in paths.items():
+        print(f"  {name}: {path.name}")
 
 
 def _sweep_cmd(config: str, out: str, jobs: int) -> None:
@@ -95,6 +110,38 @@ _app = cli(
                     arg_type=str,
                     default="results",
                     help="Output directory for C_eff.npz.",
+                ),
+                option(
+                    flags=["--plot", "-p"],
+                    arg_type=bool,
+                    default=False,
+                    help="Also write loadcase deformation plots under <out>/plots/.",
+                ),
+                option(
+                    flags=["--plot-scale"],
+                    arg_type=float,
+                    default=-1.0,
+                    help="In-plane deflection exaggeration (<0 = auto).",
+                ),
+            ],
+        ),
+        command(
+            name="plot",
+            help="Render deformation / stress plots for six unit macro-strains.",
+            callback=_plot_cmd,
+            arguments=[argument(name="config", arg_type=str, help="Path to RVE YAML.")],
+            options=[
+                option(
+                    flags=["--out", "-o"],
+                    arg_type=str,
+                    default="results/plots",
+                    help="Output directory for PNG figures.",
+                ),
+                option(
+                    flags=["--scale"],
+                    arg_type=float,
+                    default=-1.0,
+                    help="In-plane deflection exaggeration (<0 = auto).",
                 ),
             ],
         ),

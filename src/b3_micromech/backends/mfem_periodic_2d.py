@@ -12,9 +12,12 @@ from b3_micromech.mesh.cartesian import (
     element_material_ids,
     stiffness_per_element,
 )
+from b3_micromech.result import LoadcaseResult
 from b3_micromech.problem import RVEProblem
 from b3_micromech.tensors import (
     grad_to_voigt_strain_plane_strain_x,
+    macro_displacement_at_yz,
+    von_mises_voigt,
     voigt_b_matrix_plane_strain_x,
 )
 
@@ -191,7 +194,7 @@ class PeriodicPlaneStrainSession:
     def c_per_gp(self) -> NDArray[np.float64]:
         return self._data.c_per_gp
 
-    def solve_macro_strain(self, E_voigt: NDArray[np.float64]) -> NDArray[np.float64]:
+    def solve_macro_strain(self, E_voigt: NDArray[np.float64]) -> LoadcaseResult:
         import mfem.ser as mfem
 
         E_voigt = np.asarray(E_voigt, dtype=float)
@@ -214,7 +217,35 @@ class PeriodicPlaneStrainSession:
         eps_fluct = grad_to_voigt_strain_plane_strain_x(grad_u)
         eps_total = eps_fluct + E_voigt[None, :]
         sigma_per_gp = np.einsum("nij,nj->ni", data.c_per_gp, eps_total)
-        return (data.gp_weights[:, None] * sigma_per_gp).sum(axis=0) / data.gp_weights.sum()
+        macro_stress = (data.gp_weights[:, None] * sigma_per_gp).sum(axis=0) / data.gp_weights.sum()
+
+        u_tilde = np.column_stack(
+            [u_L[d * n_scalar_L : d * n_scalar_L + nv] for d in range(3)]
+        )
+        vertices_yz = np.array(
+            [self.mesh.GetVertexArray(i) for i in range(nv)], dtype=float
+        )
+        u_macro = macro_displacement_at_yz(E_voigt, vertices_yz)
+        u_total = u_tilde + u_macro
+
+        nq = data.nq
+        von_mises = np.empty(data.n_elem, dtype=float)
+        for e in range(data.n_elem):
+            vals = [
+                von_mises_voigt(sigma_per_gp[e * nq + q])
+                for q in range(nq)
+            ]
+            von_mises[e] = float(np.mean(vals))
+
+        return LoadcaseResult(
+            macro_strain=E_voigt.copy(),
+            macro_stress=macro_stress,
+            u_at_vertices=u_total,
+            u_tilde_at_vertices=u_tilde,
+            eps_per_gp=eps_total,
+            sigma_per_gp=sigma_per_gp,
+            von_mises_per_elem=von_mises,
+        )
 
 
 def make_session(problem: RVEProblem) -> PeriodicPlaneStrainSession:
@@ -310,7 +341,7 @@ def solve_periodic_plane_strain(problem: RVEProblem) -> tuple[NDArray[np.float64
     eye6 = np.eye(6)
     cols = np.zeros((6, 6))
     for k in range(6):
-        cols[:, k] = session.solve_macro_strain(eye6[k])
+        cols[:, k] = session.solve_macro_strain(eye6[k]).macro_stress
     C_eff = 0.5 * (cols + cols.T)
     meta = {
         "backend": "mfem_periodic_2d_plane_strain",

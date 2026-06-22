@@ -60,6 +60,16 @@ def element_material_ids(problem: RVEProblem, mesh) -> NDArray[np.int32]:
     return attrs
 
 
+def mesh_vertices_and_cells(mesh) -> tuple[NDArray[np.float64], list[NDArray[np.intp]]]:
+    """Vertex coordinates ``(nv, 2)`` and per-cell vertex index lists."""
+    nv = mesh.GetNV()
+    vertices = np.array([mesh.GetVertexArray(i) for i in range(nv)], dtype=float)
+    cells: list[NDArray[np.intp]] = []
+    for e in range(mesh.GetNE()):
+        cells.append(np.asarray(mesh.GetElement(e).GetVerticesArray(), dtype=np.intp))
+    return vertices, cells
+
+
 def stiffness_per_element(problem: RVEProblem, material_ids: NDArray[np.int32]) -> NDArray[np.float64]:
     matrix = problem.materials[problem.matrix_material].stiffness
     fibre = problem.materials[problem.fibre_material].stiffness

@@ -21,8 +21,24 @@ pip install -e .
 ```sh
 b3-micromech validate examples/ud_transverse.yaml
 b3-micromech solve   examples/ud_transverse.yaml --out results
+b3-micromech solve   examples/ud_transverse.yaml --out results --plot
+b3-micromech plot    examples/ud_transverse.yaml --out results/plots
 b3-micromech sweep   examples/sweep_default.yaml --out results
+
+# or the bundled example script
+python examples/plot_loadcases.py
+bash examples/run_visualization.sh
 ```
+
+Plot bundle (requires `pip install b3-micromech[viz]`):
+
+| Figure | Content |
+|---|---|
+| `rve_overview.png` | Undeformed mesh, fibre disc |
+| `loadcase_deformations.png` | 2×3 in-plane deflection quiver per unit strain |
+| `fibre_displacement.png` | 2×3 fibre-direction \(u_x\) |
+| `von_mises.png` | 2×3 element von Mises stress |
+| `engineering_constants.png` | Homogenized E, G, ν bar chart |
 
 ## Tests
 

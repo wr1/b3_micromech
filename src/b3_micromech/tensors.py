@@ -141,6 +141,47 @@ def engineering_constants_transverse_iso(stiffness: NDArray[np.float64]) -> dict
     }
 
 
+def voigt_strain_to_tensor(strain_voigt: ArrayLike) -> NDArray[np.float64]:
+    v = np.asarray(strain_voigt, dtype=float)
+    if v.shape != (6,):
+        raise ValueError(f"strain must have shape (6,), got {v.shape}")
+    return np.array(
+        [
+            [v[0], v[5] / 2, v[4] / 2],
+            [v[5] / 2, v[1], v[3] / 2],
+            [v[4] / 2, v[3] / 2, v[2]],
+        ],
+        dtype=float,
+    )
+
+
+def macro_displacement_at_yz(
+    strain_voigt: ArrayLike, points_yz: NDArray[np.float64]
+) -> NDArray[np.float64]:
+    """Affine displacement ``u = eps @ [0, y, z]`` for plane-strain slice at x=0."""
+    eps = voigt_strain_to_tensor(strain_voigt)
+    pts = np.asarray(points_yz, dtype=float)
+    xyz = np.column_stack([np.zeros(len(pts)), pts[:, 0], pts[:, 1]])
+    return xyz @ eps.T
+
+
+def von_mises_voigt(stress_voigt: ArrayLike) -> float:
+    s = np.asarray(stress_voigt, dtype=float)
+    s11, s22, s33 = s[0], s[1], s[2]
+    s23, s13, s12 = s[3], s[4], s[5]
+    return float(
+        np.sqrt(
+            0.5
+            * (
+                (s11 - s22) ** 2
+                + (s22 - s33) ** 2
+                + (s33 - s11) ** 2
+                + 6 * (s23**2 + s13**2 + s12**2)
+            )
+        )
+    )
+
+
 def grad_to_voigt_strain_plane_strain_x(grad_u: NDArray[np.float64]) -> NDArray[np.float64]:
     """(N, 3, 2) grad(u) on y–z → (N, 6) Voigt strain; ε_xx row is zero."""
     if grad_u.ndim != 3 or grad_u.shape[1:] != (3, 2):
