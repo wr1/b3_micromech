@@ -1,0 +1,52 @@
+# Hexagonal 3D-response surrogate sweep: Vf × E_m × E_Lf (117 FEA solves).
+# Vf: compact mid-range + dense cluster at the hex flat-edge (wide-side) limit.
+domain:
+  shape: hexagon
+  size: 1.0
+  mesh_resolution: [22]
+
+periodic_tolerance: 1.0e-8
+
+materials:
+  - name: matrix
+    type: isotropic
+    youngs_modulus: 3.0e9
+    poisson_ratio: 0.35
+
+  - name: fibre
+    type: transverse_isotropic
+    e_l: 230.0e9
+    e_t: 15.0e9
+    g_lt: 15.0e9
+    nu_lt: 0.20
+    nu_tt: 0.30
+
+rve:
+  matrix_material: matrix
+  fibre_material: fibre
+  fibre_volume_fraction: 0.50
+
+solver:
+  cell_type: triangle
+  material_sampling:
+    strategy: local_cloud
+    resolution: 6
+    idw_power: 2.0
+
+sweep:
+  vf:
+    hex_vf_sweep: compact
+  E_m:
+    linspace: [2.5e9, 3.5e9, 3]
+  E_Lf:
+    linspace: [180.0e9, 280.0e9, 3]
+  nu_m:
+    value: 0.35
+  E_Tf:
+    value: 15.0e9
+  G_LTf:
+    value: 15.0e9
+  nu_LTf:
+    value: 0.20
+  G_TTf:
+    value: 6.0e9

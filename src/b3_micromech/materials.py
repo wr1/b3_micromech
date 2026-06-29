@@ -23,8 +23,12 @@ class Material:
         object.__setattr__(self, "stiffness", c)
 
     @classmethod
-    def isotropic(cls, name: str, *, youngs_modulus: float, poisson_ratio: float) -> Material:
-        return cls(name=name, stiffness=isotropic_stiffness(youngs_modulus, poisson_ratio))
+    def isotropic(
+        cls, name: str, *, youngs_modulus: float, poisson_ratio: float
+    ) -> Material:
+        return cls(
+            name=name, stiffness=isotropic_stiffness(youngs_modulus, poisson_ratio)
+        )
 
     @classmethod
     def transverse_isotropic(

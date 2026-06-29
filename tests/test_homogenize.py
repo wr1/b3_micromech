@@ -1,5 +1,3 @@
-import numpy as np
-
 from b3_micromech.homogenize import surrogate_features
 from b3_micromech.problem import RVEProblem
 
@@ -8,7 +6,12 @@ def _problem(vf: float = 0.5) -> RVEProblem:
     cfg = {
         "domain": {"size": 1.0, "mesh_resolution": [8, 8]},
         "materials": [
-            {"name": "matrix", "type": "isotropic", "youngs_modulus": 3e9, "poisson_ratio": 0.35},
+            {
+                "name": "matrix",
+                "type": "isotropic",
+                "youngs_modulus": 3e9,
+                "poisson_ratio": 0.35,
+            },
             {
                 "name": "fibre",
                 "type": "transverse_isotropic",

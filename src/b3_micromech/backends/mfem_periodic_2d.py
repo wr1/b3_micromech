@@ -7,11 +7,13 @@ from dataclasses import dataclass
 import numpy as np
 from numpy.typing import NDArray
 
-from b3_micromech.mesh.cartesian import (
-    build_cartesian_mesh,
-    element_material_ids,
-    stiffness_per_element,
+from b3_micromech.mesh.build import build_mesh
+from b3_micromech.mesh.cartesian import element_cell_vertices_yz, element_material_ids
+from b3_micromech.quadrature import (
+    _resolve_material_sampling_spec,
+    effective_stiffnesses_for_gauss_points,
 )
+from b3_micromech.periodic import origin_vertex_index, periodic_vertex_master_map
 from b3_micromech.result import LoadcaseResult
 from b3_micromech.problem import RVEProblem
 from b3_micromech.tensors import (
@@ -35,27 +37,6 @@ def _mfem_spmat_to_scipy(spmat):
     )
 
 
-def _periodic_vertex_master_map_2d(
-    mesh, domain_size: tuple[float, float], tol: float
-) -> NDArray[np.intp]:
-    Ly, Lz = (float(s) for s in domain_size)
-    nv = mesh.GetNV()
-    master_of = np.empty(nv, dtype=np.intp)
-    canonical_to_master: dict[tuple[int, int], int] = {}
-    for v in range(nv):
-        coords = np.asarray(mesh.GetVertexArray(v), dtype=float)
-        canon = coords.copy()
-        if abs(canon[0] - Ly) < tol:
-            canon[0] = 0.0
-        if abs(canon[1] - Lz) < tol:
-            canon[1] = 0.0
-        key = (round(canon[0] / tol), round(canon[1] / tol))
-        if key not in canonical_to_master:
-            canonical_to_master[key] = v
-        master_of[v] = canonical_to_master[key]
-    return master_of
-
-
 @dataclass(frozen=True)
 class _ElementGPData:
     gp_coords_yz: NDArray[np.float64]
@@ -68,7 +49,7 @@ class _ElementGPData:
     nd: int
 
 
-def _collect_element_gp_data(mesh, fespace, c_per_elem: NDArray[np.float64]) -> _ElementGPData:
+def _collect_element_gp_data(mesh, fespace, problem: RVEProblem) -> _ElementGPData:
     import mfem.ser as mfem
 
     n_elem = mesh.GetNE()
@@ -86,6 +67,7 @@ def _collect_element_gp_data(mesh, fespace, c_per_elem: NDArray[np.float64]) -> 
     gp_weights = np.empty(total, dtype=float)
     elem_vdofs = np.empty((n_elem, 3, nd), dtype=np.intp)
     c_per_gp = np.empty((total, 6, 6), dtype=float)
+    gp_cell_ids = np.repeat(np.arange(n_elem, dtype=np.intp), nq)
 
     dshape_ref = mfem.DenseMatrix(nd, 2)
     J_inv = mfem.DenseMatrix(2, 2)
@@ -97,7 +79,9 @@ def _collect_element_gp_data(mesh, fespace, c_per_elem: NDArray[np.float64]) -> 
         ir = mfem.IntRules.Get(fe.GetGeomType(), 2 * fe.GetOrder())
         if fe.GetDof() != nd or ir.GetNPoints() != nq:
             raise NotImplementedError("mixed 2D meshes are not supported")
-        elem_vdofs[e] = np.asarray(fespace.GetElementVDofs(e), dtype=np.intp).reshape(3, nd)
+        elem_vdofs[e] = np.asarray(fespace.GetElementVDofs(e), dtype=np.intp).reshape(
+            3, nd
+        )
         for q in range(nq):
             ip = ir.IntPoint(q)
             T.SetIntPoint(ip)
@@ -108,7 +92,16 @@ def _collect_element_gp_data(mesh, fespace, c_per_elem: NDArray[np.float64]) -> 
             mfem.Mult(dshape_ref, J_inv, dshape_phys)
             gp_dshapes[idx] = np.asarray(dshape_phys.GetDataArray())
             gp_weights[idx] = ip.weight * T.Weight()
-            c_per_gp[idx] = c_per_elem[e]
+
+    cell_vertices = element_cell_vertices_yz(mesh)
+    sampling_spec = _resolve_material_sampling_spec(problem.solver)
+    c_per_gp[:] = effective_stiffnesses_for_gauss_points(
+        problem,
+        gp_coords_yz,
+        gp_cell_ids,
+        cell_vertices,
+        spec=sampling_spec,
+    )
 
     return _ElementGPData(
         gp_coords_yz=gp_coords_yz,
@@ -217,7 +210,9 @@ class PeriodicPlaneStrainSession:
         eps_fluct = grad_to_voigt_strain_plane_strain_x(grad_u)
         eps_total = eps_fluct + E_voigt[None, :]
         sigma_per_gp = np.einsum("nij,nj->ni", data.c_per_gp, eps_total)
-        macro_stress = (data.gp_weights[:, None] * sigma_per_gp).sum(axis=0) / data.gp_weights.sum()
+        macro_stress = (data.gp_weights[:, None] * sigma_per_gp).sum(
+            axis=0
+        ) / data.gp_weights.sum()
 
         u_tilde = np.column_stack(
             [u_L[d * n_scalar_L : d * n_scalar_L + nv] for d in range(3)]
@@ -231,10 +226,7 @@ class PeriodicPlaneStrainSession:
         nq = data.nq
         von_mises = np.empty(data.n_elem, dtype=float)
         for e in range(data.n_elem):
-            vals = [
-                von_mises_voigt(sigma_per_gp[e * nq + q])
-                for q in range(nq)
-            ]
+            vals = [von_mises_voigt(sigma_per_gp[e * nq + q]) for q in range(nq)]
             von_mises[e] = float(np.mean(vals))
 
         return LoadcaseResult(
@@ -253,13 +245,12 @@ def make_session(problem: RVEProblem) -> PeriodicPlaneStrainSession:
     import scipy.sparse as sp
     import scipy.sparse.linalg as spla
 
-    mesh = build_cartesian_mesh(problem)
-    mat_ids = element_material_ids(problem, mesh)
-    c_per_elem = stiffness_per_element(problem, mat_ids)
+    mesh = build_mesh(problem)
+    element_material_ids(problem, mesh)
 
     fec = mfem.H1_FECollection(1, mesh.Dimension())
     fespace = mfem.FiniteElementSpace(mesh, fec, 3)
-    data = _collect_element_gp_data(mesh, fespace, c_per_elem)
+    data = _collect_element_gp_data(mesh, fespace, problem)
 
     a = mfem.BilinearForm(fespace)
     a.AddDomainIntegrator(_make_bilinear_integrator(data.c_per_gp, data))
@@ -279,7 +270,18 @@ def make_session(problem: RVEProblem) -> PeriodicPlaneStrainSession:
     K_T = (P_NC.T @ K_L @ P_NC).tocsr()
 
     n_scalar_L = fespace.GetNDofs()
-    master_of = _periodic_vertex_master_map_2d(mesh, problem.size_yz, problem.periodic_tolerance)
+    master_of = periodic_vertex_master_map(
+        mesh,
+        shape=problem.domain_shape,
+        domain_size=problem.domain_size,
+        tol=problem.periodic_tolerance,
+    )
+    pin_vertex = origin_vertex_index(
+        mesh,
+        shape=problem.domain_shape,
+        domain_size=problem.domain_size,
+        tol=problem.periodic_tolerance,
+    )
     nv = mesh.GetNV()
 
     rows: list[int] = []
@@ -314,7 +316,7 @@ def make_session(problem: RVEProblem) -> PeriodicPlaneStrainSession:
                 add_row(diff_row)
 
     for d in range(3):
-        add_row(P_NC.getrow(d * n_scalar_L))
+        add_row(P_NC.getrow(d * n_scalar_L + pin_vertex))
 
     C = sp.coo_matrix((vals, (rows, cols)), shape=(n_constraints, n_T)).tocsr()
     Z = sp.csr_matrix((n_constraints, n_constraints))
@@ -335,7 +337,9 @@ def make_session(problem: RVEProblem) -> PeriodicPlaneStrainSession:
     )
 
 
-def solve_periodic_plane_strain(problem: RVEProblem) -> tuple[NDArray[np.float64], dict]:
+def solve_periodic_plane_strain(
+    problem: RVEProblem,
+) -> tuple[NDArray[np.float64], dict]:
     """Six unit macro-strain solves → volume-averaged stress columns of C_eff."""
     session = make_session(problem)
     eye6 = np.eye(6)
@@ -345,10 +349,13 @@ def solve_periodic_plane_strain(problem: RVEProblem) -> tuple[NDArray[np.float64
     C_eff = 0.5 * (cols + cols.T)
     meta = {
         "backend": "mfem_periodic_2d_plane_strain",
+        "domain_shape": problem.domain_shape,
         "mesh_resolution": list(problem.mesh_resolution),
         "cell_type": problem.cell_type,
         "n_cells": int(session.mesh.GetNE()),
         "n_dofs": int(session.fespace.GetTrueVSize()),
         "fibre_volume_fraction": problem.fibre_volume_fraction,
+        "material_sampling": _resolve_material_sampling_spec(problem.solver),
+        "amr": problem.solver.get("amr", {}),
     }
     return C_eff, meta

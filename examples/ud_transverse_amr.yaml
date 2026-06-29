@@ -1,0 +1,39 @@
+# Square RVE with implicit per-GP material lookup and stiffness-jump AMR.
+domain:
+  size: 1.0
+  mesh_resolution: [12, 12]
+
+periodic_tolerance: 1.0e-8
+
+materials:
+  - name: matrix
+    type: isotropic
+    youngs_modulus: 3.0e9
+    poisson_ratio: 0.35
+
+  - name: fibre
+    type: transverse_isotropic
+    e_l: 230.0e9
+    e_t: 15.0e9
+    g_lt: 15.0e9
+    nu_lt: 0.20
+    nu_tt: 0.30
+
+rve:
+  matrix_material: matrix
+  fibre_material: fibre
+  fibre_volume_fraction: 0.50
+
+solver:
+  cell_type: quadrilateral
+  material_sampling:
+    strategy: local_cloud
+    resolution: 6
+    idw_power: 2.0
+  amr:
+    enabled: true
+    marker: stiffness_jump
+    max_iterations: 2
+    threshold: 0.12
+    n_samples_per_cell: 16
+    dof_budget: 80000

@@ -15,7 +15,12 @@ def test_homogeneous_matrix_recovers_stiffness():
     cfg = {
         "domain": {"size": 1.0, "mesh_resolution": [12, 12]},
         "materials": [
-            {"name": "matrix", "type": "isotropic", "youngs_modulus": 3e9, "poisson_ratio": 0.35},
+            {
+                "name": "matrix",
+                "type": "isotropic",
+                "youngs_modulus": 3e9,
+                "poisson_ratio": 0.35,
+            },
             {
                 "name": "fibre",
                 "type": "transverse_isotropic",
@@ -44,7 +49,12 @@ def test_ud_rve_agrees_with_mori_tanaka_transverse():
         {
             "domain": {"size": 1.0, "mesh_resolution": [48, 48]},
             "materials": [
-                {"name": "matrix", "type": "isotropic", "youngs_modulus": 3e9, "poisson_ratio": 0.35},
+                {
+                    "name": "matrix",
+                    "type": "isotropic",
+                    "youngs_modulus": 3e9,
+                    "poisson_ratio": 0.35,
+                },
                 {
                     "name": "fibre",
                     "type": "transverse_isotropic",
@@ -66,9 +76,7 @@ def test_ud_rve_agrees_with_mori_tanaka_transverse():
     result = homogenize(problem)
     matrix = problem.materials["matrix"]
     fibre = problem.materials["fibre"]
-    Cmt = mori_tanaka_cylinder(
-        matrix=matrix, fibre=fibre, fibre_volume_fraction=0.5
-    )
+    Cmt = mori_tanaka_cylinder(matrix=matrix, fibre=fibre, fibre_volume_fraction=0.5)
     ec_fea = engineering_constants_transverse_iso(result.effective_stiffness)
     ec_mt = engineering_constants_transverse_iso(Cmt)
     assert abs(ec_fea["e_t"] - ec_mt["e_t"]) / ec_mt["e_t"] < 0.07

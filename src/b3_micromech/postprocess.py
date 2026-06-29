@@ -28,9 +28,7 @@ def solve_all_loadcases(problem: RVEProblem) -> LoadcaseSet:
 
     session = make_session(problem)
     mat_ids = element_material_ids(problem, session.mesh)
-    results = tuple(
-        session.solve_macro_strain(np.eye(6)[k]) for k in range(6)
-    )
+    results = tuple(session.solve_macro_strain(np.eye(6)[k]) for k in range(6))
     return LoadcaseSet(
         problem=problem,
         session=session,

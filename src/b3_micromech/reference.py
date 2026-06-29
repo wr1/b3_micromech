@@ -6,10 +6,15 @@ import numpy as np
 from numpy.typing import NDArray
 
 from b3_micromech.materials import Material
-from b3_micromech.tensors import engineering_constants_transverse_iso, transverse_isotropic_stiffness
+from b3_micromech.tensors import (
+    engineering_constants_transverse_iso,
+    transverse_isotropic_stiffness,
+)
 
 
-def _engineering_constants_isotropic(stiffness: NDArray[np.float64]) -> tuple[float, float]:
+def _engineering_constants_isotropic(
+    stiffness: NDArray[np.float64],
+) -> tuple[float, float]:
     C = np.asarray(stiffness, dtype=float)
     lam_plus_2mu = C[0, 0]
     lam = C[0, 1]

@@ -1,0 +1,56 @@
+# Hexagonal high-Vf surrogate sweep: dense packing-limit cluster × E_m × E_Tf.
+# Use for refinement near the flat-edge limit (Vf ≈ 0.74–0.89 at 1% standoff).
+domain:
+  shape: hexagon
+  size: 1.0
+  mesh_resolution: [22]
+
+periodic_tolerance: 1.0e-8
+
+materials:
+  - name: matrix
+    type: isotropic
+    youngs_modulus: 3.0e9
+    poisson_ratio: 0.35
+
+  - name: fibre
+    type: transverse_isotropic
+    e_l: 230.0e9
+    e_t: 15.0e9
+    g_lt: 15.0e9
+    nu_lt: 0.20
+    nu_tt: 0.30
+
+rve:
+  matrix_material: matrix
+  fibre_material: fibre
+  fibre_volume_fraction: 0.82
+
+solver:
+  cell_type: triangle
+  material_sampling:
+    strategy: local_cloud
+    resolution: 6
+    idw_power: 2.0
+
+sweep:
+  vf:
+    hex_vf_sweep:
+      preset: high
+      standoff: 0.01
+      dense_start: 0.74
+      n_dense: 8
+  E_m:
+    linspace: [2.5e9, 3.5e9, 3]
+  E_Tf:
+    linspace: [12.0e9, 18.0e9, 2]
+  nu_m:
+    value: 0.35
+  E_Lf:
+    value: 230.0e9
+  G_LTf:
+    value: 15.0e9
+  nu_LTf:
+    value: 0.20
+  G_TTf:
+    value: 6.0e9

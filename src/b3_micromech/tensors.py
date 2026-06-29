@@ -15,12 +15,16 @@ VOIGT_PAIRS: tuple[tuple[int, int], ...] = (
 )
 
 
-def isotropic_stiffness(youngs_modulus: float, poisson_ratio: float) -> NDArray[np.float64]:
+def isotropic_stiffness(
+    youngs_modulus: float, poisson_ratio: float
+) -> NDArray[np.float64]:
     if youngs_modulus <= 0:
         raise ValueError("youngs_modulus must be positive")
     if not (-1.0 < poisson_ratio < 0.5):
         raise ValueError("poisson_ratio must be in (-1, 0.5)")
-    lam = youngs_modulus * poisson_ratio / ((1 + poisson_ratio) * (1 - 2 * poisson_ratio))
+    lam = (
+        youngs_modulus * poisson_ratio / ((1 + poisson_ratio) * (1 - 2 * poisson_ratio))
+    )
     mu = youngs_modulus / (2 * (1 + poisson_ratio))
     c = np.zeros((6, 6), dtype=float)
     c[0:3, 0:3] = lam
@@ -119,7 +123,9 @@ def voigt_b_matrix_plane_strain_x(
     return B
 
 
-def engineering_constants_transverse_iso(stiffness: NDArray[np.float64]) -> dict[str, float]:
+def engineering_constants_transverse_iso(
+    stiffness: NDArray[np.float64],
+) -> dict[str, float]:
     C = np.asarray(stiffness, dtype=float)
     n = C[0, 0]
     k = 0.5 * (C[1, 1] + C[1, 2])
@@ -182,7 +188,9 @@ def von_mises_voigt(stress_voigt: ArrayLike) -> float:
     )
 
 
-def grad_to_voigt_strain_plane_strain_x(grad_u: NDArray[np.float64]) -> NDArray[np.float64]:
+def grad_to_voigt_strain_plane_strain_x(
+    grad_u: NDArray[np.float64],
+) -> NDArray[np.float64]:
     """(N, 3, 2) grad(u) on y–z → (N, 6) Voigt strain; ε_xx row is zero."""
     if grad_u.ndim != 3 or grad_u.shape[1:] != (3, 2):
         raise ValueError(f"grad_u must have shape (N, 3, 2), got {grad_u.shape}")

@@ -5,7 +5,7 @@ from __future__ import annotations
 import numpy as np
 from numpy.typing import NDArray
 
-from b3_micromech.geometry import classify_points, fibre_centre
+from b3_micromech.geometry import classify_points
 from b3_micromech.problem import RVEProblem
 
 
@@ -33,6 +33,17 @@ def build_cartesian_mesh(problem: RVEProblem):
     return mesh
 
 
+def element_cell_vertices_yz(mesh) -> NDArray[np.float64]:
+    """Per-element vertex coordinates ``(n_elem, n_verts, 2)``."""
+    n_elem = mesh.GetNE()
+    n_verts = len(mesh.GetElement(0).GetVerticesArray())
+    out = np.empty((n_elem, n_verts, 2), dtype=float)
+    for e in range(n_elem):
+        vids = mesh.GetElement(e).GetVerticesArray()
+        out[e] = np.array([mesh.GetVertexArray(int(v)) for v in vids], dtype=float)
+    return out
+
+
 def element_centroids_yz(mesh) -> NDArray[np.float64]:
     n_elem = mesh.GetNE()
     centroids = np.empty((n_elem, 2), dtype=float)
@@ -47,11 +58,7 @@ def element_centroids_yz(mesh) -> NDArray[np.float64]:
 def element_material_ids(problem: RVEProblem, mesh) -> NDArray[np.int32]:
     """Per-element attribute: 1 = matrix, 2 = fibre."""
     centroids = element_centroids_yz(mesh)
-    centre = (
-        problem.centre_yz
-        if problem.centre_yz is not None
-        else fibre_centre(problem.domain_size)
-    )
+    centre = problem.centre_yz
     is_fibre = classify_points(centroids, centre=centre, radius=problem.fibre_radius)
     attrs = np.ones(mesh.GetNE(), dtype=np.int32)
     attrs[is_fibre] = 2
@@ -70,7 +77,9 @@ def mesh_vertices_and_cells(mesh) -> tuple[NDArray[np.float64], list[NDArray[np.
     return vertices, cells
 
 
-def stiffness_per_element(problem: RVEProblem, material_ids: NDArray[np.int32]) -> NDArray[np.float64]:
+def stiffness_per_element(
+    problem: RVEProblem, material_ids: NDArray[np.int32]
+) -> NDArray[np.float64]:
     matrix = problem.materials[problem.matrix_material].stiffness
     fibre = problem.materials[problem.fibre_material].stiffness
     out = np.empty((material_ids.shape[0], 6, 6), dtype=float)

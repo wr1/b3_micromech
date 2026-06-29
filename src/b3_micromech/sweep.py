@@ -11,8 +11,35 @@ import yaml
 from numpy.typing import NDArray
 
 from b3_micromech.export import save_dataset
+from b3_micromech.geometry import HexVfSweepPreset, hex_vf_sweep_values
 from b3_micromech.homogenize import homogenize, surrogate_features
 from b3_micromech.problem import RVEProblem
+
+
+def _expand_hex_vf_sweep(spec: dict[str, Any]) -> list[float]:
+    """Expand a ``hex_vf_sweep`` block into standoff-aware Vf samples."""
+    preset: HexVfSweepPreset = "full"
+    kwargs: dict[str, Any] = {}
+    raw = spec["hex_vf_sweep"]
+    if isinstance(raw, str):
+        preset = raw  # type: ignore[assignment]
+    elif isinstance(raw, dict):
+        preset = raw.get("preset", "full")
+        if "vf_min" in raw:
+            kwargs["vf_min"] = float(raw["vf_min"])
+        if "standoff" in raw:
+            kwargs["standoff"] = float(raw["standoff"])
+        if "dense_start" in raw:
+            kwargs["dense_start"] = float(raw["dense_start"])
+        if "n_dense" in raw:
+            kwargs["n_dense"] = int(raw["n_dense"])
+    else:
+        raise ValueError(
+            f"hex_vf_sweep must be a preset name or option dict, got {raw!r}"
+        )
+    if preset not in ("full", "compact", "high"):
+        raise ValueError(f"unknown hex_vf_sweep preset {preset!r}")
+    return hex_vf_sweep_values(preset=preset, **kwargs)
 
 
 def _expand_param(spec: dict[str, Any]) -> list[float]:
@@ -20,16 +47,36 @@ def _expand_param(spec: dict[str, Any]) -> list[float]:
         return [float(spec["value"])]
     if "values" in spec:
         return [float(v) for v in spec["values"]]
+    if "hex_vf_sweep" in spec:
+        return _expand_hex_vf_sweep(spec)
     if "linspace" in spec:
         start, stop, n = spec["linspace"]
         return [float(x) for x in np.linspace(float(start), float(stop), int(n))]
     raise ValueError(f"unsupported sweep spec: {spec!r}")
 
 
+def varying_sweep_parameters(sweep_cfg: dict[str, Any]) -> list[str]:
+    """Sweep keys whose specification expands to more than one value."""
+    keys = [k for k in sweep_cfg if k != "mesh"]
+    return [k for k in keys if len(_expand_param(sweep_cfg[k])) > 1]
+
+
+def count_sweep_points(sweep_cfg: dict[str, Any]) -> int:
+    """Number of FEA solves in a sweep hypercube."""
+    return len(_param_grid(sweep_cfg))
+
+
 def _param_grid(sweep_cfg: dict[str, Any]) -> list[dict[str, float]]:
     keys = [k for k in sweep_cfg if k != "mesh"]
     values = [_expand_param(sweep_cfg[k]) for k in keys]
     return [dict(zip(keys, combo, strict=True)) for combo in itertools.product(*values)]
+
+
+def problem_from_sweep_point(
+    base: dict[str, Any], point: dict[str, float]
+) -> RVEProblem:
+    """Build an :class:`RVEProblem` from a sweep base config and one grid point."""
+    return _apply_point(base, point)
 
 
 def _apply_point(base: dict[str, Any], point: dict[str, float]) -> RVEProblem:
@@ -82,7 +129,9 @@ def run_sweep(
     stiffness: list[NDArray[np.float64]] = []
     records: list[dict] = []
 
-    def _one(point: dict[str, float]) -> tuple[NDArray[np.float64], NDArray[np.float64], dict]:
+    def _one(
+        point: dict[str, float],
+    ) -> tuple[NDArray[np.float64], NDArray[np.float64], dict]:
         problem = _apply_point(cfg, point)
         result = homogenize(problem)
         feat = surrogate_features(problem)
@@ -95,7 +144,9 @@ def run_sweep(
 
             out = Parallel(n_jobs=n_jobs)(delayed(_one)(p) for p in points)
         except ImportError as exc:
-            raise ImportError("parallel sweep requires joblib; pip install b3-micromech[sweep]") from exc
+            raise ImportError(
+                "parallel sweep requires joblib; pip install b3-micromech[sweep]"
+            ) from exc
     else:
         out = [_one(p) for p in points]
 
@@ -115,5 +166,9 @@ def sweep_to_file(config_path: str, out_path: str, *, n_jobs: int = 1) -> None:
         out_path,
         features=X,
         stiffness=C,
-        metadata={"source": config_path, "n_points": int(X.shape[0]), "records": records},
+        metadata={
+            "source": config_path,
+            "n_points": int(X.shape[0]),
+            "records": records,
+        },
     )

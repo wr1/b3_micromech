@@ -1,0 +1,107 @@
+"""Surrogate feature vectors aligned with ``b3_tex.micromodels.SurrogateModel``."""
+
+from __future__ import annotations
+
+from typing import Protocol
+
+import numpy as np
+from numpy.typing import NDArray
+
+from b3_micromech.reference import _engineering_constants_isotropic
+from b3_micromech.tensors import engineering_constants_transverse_iso
+
+
+class _StiffnessMaterial(Protocol):
+    stiffness: NDArray[np.float64]
+
+
+def constituent_engineering_constants(
+    matrix: _StiffnessMaterial,
+    fibre: _StiffnessMaterial,
+) -> tuple[float, float, float, float, float, float, float]:
+    """Return ``(E_m, nu_m, E_Lf, E_Tf, G_LTf, nu_LTf, G_TTf)``."""
+    em, num = _engineering_constants_isotropic(matrix.stiffness)
+    fc = engineering_constants_transverse_iso(fibre.stiffness)
+    return (
+        float(em),
+        float(num),
+        float(fc["e_l"]),
+        float(fc["e_t"]),
+        float(fc["g_lt"]),
+        float(fc["nu_lt"]),
+        float(fc["g_tt"]),
+    )
+
+
+def build_feature_matrix(
+    vf: NDArray[np.float64],
+    *,
+    matrix: _StiffnessMaterial | None = None,
+    fibre: _StiffnessMaterial | None = None,
+    E_m: float | None = None,
+    nu_m: float | None = None,
+    E_Lf: float | None = None,
+    E_Tf: float | None = None,
+    G_LTf: float | None = None,
+    nu_LTf: float | None = None,
+    G_TTf: float | None = None,
+) -> NDArray[np.float64]:
+    """Build ``(N, 8)`` feature rows ``[Vf, E_m, nu_m, E_Lf, E_Tf, G_LTf, nu_LTf, G_TTf]``."""
+    vf_arr = np.asarray(vf, dtype=float).ravel()
+    if matrix is not None and fibre is not None:
+        em, num, elf, etf, gltf, nultf, gttf = constituent_engineering_constants(
+            matrix, fibre
+        )
+    else:
+        scalars = (E_m, nu_m, E_Lf, E_Tf, G_LTf, nu_LTf, G_TTf)
+        if any(v is None for v in scalars):
+            raise ValueError(
+                "provide matrix and fibre, or all seven constituent scalars"
+            )
+        em, num, elf, etf, gltf, nultf, gttf = (float(v) for v in scalars)  # type: ignore[misc]
+    n = vf_arr.shape[0]
+    out = np.empty((n, 8), dtype=float)
+    out[:, 0] = vf_arr
+    out[:, 1] = em
+    out[:, 2] = num
+    out[:, 3] = elf
+    out[:, 4] = etf
+    out[:, 5] = gltf
+    out[:, 6] = nultf
+    out[:, 7] = gttf
+    return out
+
+
+def features_out_of_bounds(
+    features: NDArray[np.float64],
+    bounds: NDArray[np.float64],
+) -> NDArray[np.bool_]:
+    """Per-row mask: True where any feature lies outside training ``[min, max]`` bounds."""
+    x = np.asarray(features, dtype=float)
+    if x.ndim == 1:
+        x = x[None, :]
+    b = np.asarray(bounds, dtype=float)
+    if b.shape != (8, 2):
+        raise ValueError(f"bounds must have shape (8, 2), got {b.shape}")
+    below = x < b[:, 0]
+    above = x > b[:, 1]
+    return np.any(below | above, axis=1)
+
+
+def warn_if_out_of_bounds(
+    features: NDArray[np.float64],
+    bounds: NDArray[np.float64],
+    *,
+    context: str = "batch",
+) -> int:
+    """Log a warning when features extrapolate beyond training bounds; return OOB count."""
+    import warnings
+
+    mask = features_out_of_bounds(features, bounds)
+    n_oob = int(mask.sum())
+    if n_oob:
+        warnings.warn(
+            f"{n_oob} of {mask.shape[0]} {context} feature rows lie outside training bounds",
+            stacklevel=3,
+        )
+    return n_oob

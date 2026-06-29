@@ -7,7 +7,8 @@ from pathlib import Path
 import numpy as np
 from numpy.typing import NDArray
 
-from b3_micromech.geometry import fibre_centre
+from b3_micromech.amr import _resolve_amr_spec, cell_refinement_metric
+from b3_micromech.geometry import hexagon_corners
 from b3_micromech.mesh.cartesian import mesh_vertices_and_cells
 from b3_micromech.postprocess import LoadcaseSet
 from b3_micromech.result import LOADCASE_LABELS
@@ -30,8 +31,34 @@ def _material_colors(material_ids: NDArray[np.int32]) -> list:
 
 
 def _fibre_circle(problem) -> tuple[float, float, float]:
-    centre = problem.centre_yz if problem.centre_yz is not None else fibre_centre(problem.domain_size)
+    centre = problem.centre_yz
     return float(centre[0]), float(centre[1]), float(problem.fibre_radius)
+
+
+def _set_plot_limits(ax, problem) -> None:
+    ymin, ymax, zmin, zmax = problem.plot_bounds
+    ax.set_xlim(ymin, ymax)
+    ax.set_ylim(zmin, zmax)
+
+
+def _draw_domain_outline(ax, problem) -> None:
+    if problem.domain_shape == "hexagon":
+        from matplotlib.patches import Polygon
+
+        corners = hexagon_corners(problem.domain_size)
+        ax.add_patch(
+            Polygon(
+                corners,
+                fill=False,
+                edgecolor="#1a1a1a",
+                linewidth=1.2,
+                linestyle="-",
+                zorder=2,
+            )
+        )
+    else:
+        ymax, zmax = problem.size_yz
+        ax.plot([0, ymax, ymax, 0, 0], [0, 0, zmax, zmax, 0], color="#1a1a1a", lw=1.2)
 
 
 def _auto_scale(loadcases: LoadcaseSet, fraction: float = 0.12) -> float:
@@ -58,6 +85,65 @@ def _draw_mesh_cells(ax, vertices, cells, facecolors, edgecolor="#333333", lw=0.
     return coll
 
 
+def _amr_enabled(problem) -> bool:
+    return bool(_resolve_amr_spec(problem.solver).get("enabled", False))
+
+
+def plot_amr_refinement(loadcases: LoadcaseSet, out_path: str | Path) -> Path:
+    """Mesh coloured by the AMR stiffness-jump marker (post-refinement)."""
+    plt = _require_matplotlib()
+    from matplotlib.collections import PolyCollection
+    from matplotlib.patches import Circle
+
+    problem = loadcases.problem
+    amr = _resolve_amr_spec(problem.solver)
+    mesh = loadcases.session.mesh
+    metric = cell_refinement_metric(
+        problem,
+        mesh,
+        marker=amr["marker"],
+        n_samples_per_cell=amr["n_samples_per_cell"],
+    )
+
+    vertices, cells = mesh_vertices_and_cells(mesh)
+    polys = [vertices[cell] for cell in cells]
+    threshold = amr["threshold"]
+
+    fig, ax = plt.subplots(figsize=(5.5, 5.5), constrained_layout=True)
+    coll = PolyCollection(
+        polys,
+        array=metric,
+        cmap="magma",
+        edgecolors="#333333",
+        linewidths=0.35,
+    )
+    coll.set_clim(0.0, max(float(metric.max()), threshold))
+    ax.add_collection(coll)
+    _draw_domain_outline(ax, problem)
+    cy, cz, r = _fibre_circle(problem)
+    ax.add_patch(
+        Circle(
+            (cy, cz), r, fill=False, edgecolor="#ffffff", linewidth=1.2, linestyle="--"
+        )
+    )
+    ax.set_aspect("equal")
+    _set_plot_limits(ax, problem)
+    ax.set_xlabel("y")
+    ax.set_ylabel("z")
+    ax.set_title(
+        f"AMR marker ({amr['marker']})  {mesh.GetNE()} cells, threshold={threshold:g}"
+    )
+    cbar = fig.colorbar(coll, ax=ax, shrink=0.85)
+    cbar.ax.axhline(threshold, color="#4fc3f7", linewidth=1.5, linestyle="--")
+    cbar.set_label("stiffness-jump score")
+
+    out = Path(out_path)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(out, dpi=160)
+    plt.close(fig)
+    return out
+
+
 def plot_rve_overview(loadcases: LoadcaseSet, out_path: str | Path) -> Path:
     """Undeformed transverse mesh with fibre disc."""
     plt = _require_matplotlib()
@@ -71,16 +157,25 @@ def plot_rve_overview(loadcases: LoadcaseSet, out_path: str | Path) -> Path:
     _draw_mesh_cells(ax, vertices, cells, facecolors)
     cy, cz, r = _fibre_circle(problem)
     ax.add_patch(
-        Circle((cy, cz), r, fill=False, edgecolor="#1a1a1a", linewidth=1.5, linestyle="--")
+        Circle(
+            (cy, cz), r, fill=False, edgecolor="#1a1a1a", linewidth=1.5, linestyle="--"
+        )
     )
+    _draw_domain_outline(ax, problem)
     ax.set_aspect("equal")
-    ax.set_xlim(0, problem.domain_size)
-    ax.set_ylim(0, problem.domain_size)
+    _set_plot_limits(ax, problem)
     ax.set_xlabel("y")
     ax.set_ylabel("z")
+    shape = problem.domain_shape
+    mesh = loadcases.session.mesh
+    res_tag = (
+        f"AMR {mesh.GetNE()} cells"
+        if _amr_enabled(problem)
+        else f"{problem.mesh_resolution[0]}×{problem.mesh_resolution[1]}"
+    )
     ax.set_title(
-        f"Transverse RVE  (Vf={problem.fibre_volume_fraction:.2f}, "
-        f"{problem.mesh_resolution[0]}×{problem.mesh_resolution[1]} {problem.cell_type})"
+        f"Transverse RVE ({shape})  (Vf={problem.fibre_volume_fraction:.2f}, "
+        f"{res_tag} {problem.cell_type})"
     )
     out = Path(out_path)
     out.parent.mkdir(parents=True, exist_ok=True)
@@ -164,11 +259,12 @@ def _plot_loadcase_panel(
 
     cy, cz, r = _fibre_circle(problem)
     ax.add_patch(
-        Circle((cy, cz), r, fill=False, edgecolor="#000000", linewidth=1.0, linestyle=":")
+        Circle(
+            (cy, cz), r, fill=False, edgecolor="#000000", linewidth=1.0, linestyle=":"
+        )
     )
     ax.set_aspect("equal")
-    ax.set_xlim(0, problem.domain_size)
-    ax.set_ylim(0, problem.domain_size)
+    _set_plot_limits(ax, problem)
     voigt_idx = int(np.argmax(np.abs(result.macro_strain)))
     sig = result.macro_stress[voigt_idx] / 1e9
     ax.set_title(f"{title}\nσ̄[{voigt_idx}] = {sig:.2f} GPa", fontsize=9)
@@ -237,7 +333,9 @@ def plot_fibre_displacement(loadcases: LoadcaseSet, out_path: str | Path) -> Pat
     mappable = None
     cbar_label = ""
 
-    for ax, (label, _), result in zip(axes.ravel(), LOADCASE_LABELS, loadcases.results, strict=True):
+    for ax, (label, _), result in zip(
+        axes.ravel(), LOADCASE_LABELS, loadcases.results, strict=True
+    ):
         mappable, cbar_label = _plot_loadcase_panel(
             ax,
             vertices=vertices,
@@ -274,7 +372,9 @@ def plot_von_mises(loadcases: LoadcaseSet, out_path: str | Path) -> Path:
     fig, axes = plt.subplots(2, 3, figsize=(13, 8.5), constrained_layout=True)
     mappable = None
 
-    for ax, (label, _), result in zip(axes.ravel(), LOADCASE_LABELS, loadcases.results, strict=True):
+    for ax, (label, _), result in zip(
+        axes.ravel(), LOADCASE_LABELS, loadcases.results, strict=True
+    ):
         polys = [vertices[cell] for cell in cells]
         vm = result.von_mises_per_elem / 1e6
         coll = PolyCollection(
@@ -286,8 +386,7 @@ def plot_von_mises(loadcases: LoadcaseSet, out_path: str | Path) -> Path:
         )
         ax.add_collection(coll)
         ax.set_aspect("equal")
-        ax.set_xlim(0, problem.domain_size)
-        ax.set_ylim(0, problem.domain_size)
+        _set_plot_limits(ax, problem)
         ax.set_title(label, fontsize=9)
         ax.set_xlabel("y")
         ax.set_ylabel("z")
@@ -323,7 +422,7 @@ def plot_engineering_constants(loadcases: LoadcaseSet, out_path: str | Path) -> 
         f"Homogenized constants  (Vf={loadcases.problem.fibre_volume_fraction:.2f})"
     )
     for bar, val, unit in zip(bars, values, units):
-        text = f"{val/1e9:.2f} {unit}" if unit != "–" else f"{val:.3f}"
+        text = f"{val / 1e9:.2f} {unit}" if unit != "–" else f"{val:.3f}"
         ax.text(
             bar.get_x() + bar.get_width() / 2,
             bar.get_height(),
@@ -361,4 +460,8 @@ def render_all_figures(
             loadcases, out_dir / "engineering_constants.png"
         ),
     }
+    if _amr_enabled(loadcases.problem):
+        paths["amr_refinement"] = plot_amr_refinement(
+            loadcases, out_dir / "amr_refinement.png"
+        )
     return paths
