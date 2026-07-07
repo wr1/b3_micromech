@@ -297,7 +297,7 @@ def main():
         print("\n--- Schema Summary ---")
         print(json.dumps(SCHEMA, indent=2, default=str))
 
-    if mode in ("dry-run", "all"):
+    if mode in ("dry-run", "sweep-size", "all"):
         sizes = estimate_sweep_size(data)
         print("\n--- Sweep Size Estimates ---")
         for name, info in sizes.items():
