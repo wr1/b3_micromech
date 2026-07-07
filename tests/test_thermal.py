@@ -479,7 +479,7 @@ def test_series_bound_transverse_conductivity():
     series_k = 1.0 / (vf / k_f + (1.0 - vf) / k_m)  # ≈ 0.4545
 
     cfg = {
-        "domain": {"size": 1.0, "mesh_resolution": [12, 12]},
+        "domain": {"size": 1.0, "mesh_resolution": [24, 24]},
         "materials": [
             {
                 "name": "matrix",

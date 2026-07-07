@@ -46,7 +46,7 @@ class HomogenizationResult:
 
     def __post_init__(self) -> None:
         if self.metadata is None:
-            self.metadata = {}
+            object.__setattr__(self, "metadata", {})
 
 
 def homogenize(problem: RVEProblem) -> HomogenizationResult:

@@ -809,12 +809,18 @@ def effective_conductivity_tensor(
     # ---- Step 4: solve for each transverse direction ----
     k_eff_2d = np.zeros((2, 2), dtype=float)
 
-    # Guard: zero in-plane conductivity (e.g. axial-only material data) makes
-    # the diffusion operator singular; the transverse block is simply zero.
-    if not np.any(np.abs(k_per_gp[:, 1:3, 1:3]) > 0.0):
+    # Guard: zero in-plane conductivity anywhere (e.g. axial-only material
+    # data) leaves empty operator rows -> singular factorization. Floor the
+    # in-plane block with a tiny fraction of the global maximum; if there is
+    # no in-plane conduction at all, skip the transverse solve entirely.
+    k_inplane_max = float(np.max(np.abs(k_per_gp[:, 1:3, 1:3])))
+    if k_inplane_max <= 0.0:
         _skip_transverse = True
     else:
         _skip_transverse = False
+        _floor = 1e-9 * k_inplane_max
+        for _i in (1, 2):
+            np.maximum(k_per_gp[:, _i, _i], _floor, out=k_per_gp[:, _i, _i])
 
     for dir_idx in range(2) if not _skip_transverse else []:  # y=0, z=1
         applied_grad = np.zeros(2, dtype=float)
