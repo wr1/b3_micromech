@@ -161,8 +161,10 @@ def features_out_of_bounds(
     if x.ndim == 1:
         x = x[None, :]
     b = np.asarray(bounds, dtype=float)
-    if b.shape != (12, 2):
-        raise ValueError(f"bounds must have shape (12, 2), got {b.shape}")
+    if b.ndim != 2 or b.shape[1] != 2 or b.shape[0] != x.shape[1]:
+        raise ValueError(
+            f"bounds must have shape ({x.shape[1]}, 2), got {b.shape}"
+        )
     below = x < b[:, 0]
     above = x > b[:, 1]
     return np.any(below | above, axis=1)
