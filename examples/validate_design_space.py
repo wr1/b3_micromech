@@ -278,7 +278,7 @@ def main():
     with open(path, "r") as f:
         data = yaml.safe_load(f)
 
-    mode = sys.argv[-1] if len(sys.argv) > 2 else "validate"
+    mode = sys.argv[-1].lstrip("-") if len(sys.argv) > 2 else "validate"
 
     import os
     os.environ["PYTHONUNBUFFERED"] = "1"
