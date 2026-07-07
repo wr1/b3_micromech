@@ -472,6 +472,7 @@ def solve_thermal_loadcase(
     """
     import mfem.ser as mfem
     import scipy.sparse as sp
+    import scipy.sparse.linalg as spla
 
     mesh = build_mesh(problem)
     fec = mfem.H1_FECollection(1, mesh.Dimension())
