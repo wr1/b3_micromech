@@ -84,6 +84,7 @@ def build_feature_matrix(
         a_m, a_Lf, a_Tf, k_m_val = constituent_thermal_properties(
             matrix, fibre
         )
+        _thermal = bool(abs(a_m) + abs(a_Lf) + abs(a_Tf) + abs(k_m_val) > 0.0)
     else:
         scalars = (E_m, nu_m, E_Lf, E_Tf, G_LTf, nu_LTf, G_TTf)
         if any(v is None for v in scalars):
@@ -101,8 +102,12 @@ def build_feature_matrix(
             float(alpha_Tf) if alpha_Tf is not None else 0.0,
             float(k_m) if k_m is not None else 0.0,
         )
+        _thermal = any(v is not None for v in (alpha_m, alpha_Lf, alpha_Tf, k_m))
     n = vf_arr.shape[0]
-    out = np.empty((n, 12), dtype=float)
+    # Backward-compatible width: thermal columns only when thermal data is
+    # actually present — elastic-only callers keep the original (N, 8).
+    width = 12 if _thermal else 8
+    out = np.empty((n, width), dtype=float)
     out[:, 0] = vf_arr
     out[:, 1] = em
     out[:, 2] = num
@@ -111,10 +116,11 @@ def build_feature_matrix(
     out[:, 5] = gltf
     out[:, 6] = nultf
     out[:, 7] = gttf
-    out[:, 8] = a_m
-    out[:, 9] = a_Lf
-    out[:, 10] = a_Tf
-    out[:, 11] = k_m_val
+    if _thermal:
+        out[:, 8] = a_m
+        out[:, 9] = a_Lf
+        out[:, 10] = a_Tf
+        out[:, 11] = k_m_val
     return out
 
 
