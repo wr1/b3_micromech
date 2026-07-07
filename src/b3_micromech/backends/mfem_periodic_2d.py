@@ -668,7 +668,7 @@ def _make_diffusion_integrator(k_per_gp: NDArray[np.float64], data: _ElementGPDa
                     )
 
                 # Transverse-plane conductivity: k[0:2, 0:2] in (y, z)
-                k_2d = k_val[:2, :2]
+                k_2d = k_val[1:3, 1:3]
                 for i in range(nd):
                     for j in range(nd):
                         grad_i = dsh_phys[i]  # (dy, dz)
@@ -839,7 +839,7 @@ def effective_conductivity_tensor(
                 mfem.CalcInverse(J, J_inv)
 
                 k_val = k_per_gp[idx]
-                k_2d = k_val[:2, :2]
+                k_2d = k_val[1:3, 1:3]
                 rhs_vec = k_2d @ applied_grad
 
                 dsh_ref = gp_dshapes[idx]
