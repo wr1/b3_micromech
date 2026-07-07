@@ -857,19 +857,18 @@ def effective_conductivity_tensor(
                 w = gp_weights[idx]
                 for i in range(nd):
                     local_rhs = -(dsh_phys[i] @ rhs_vec) * w
-                    for l in range(nd):
-                        global_idx = elem_vdofs[e, l]
-                        P_NC_row = P_NC.getrow(global_idx)
-                        if P_NC_row.nnz > 0:
-                            for c_idx, c_val in zip(P_NC_row.indices, P_NC_row.data):
-                                b_L[int(c_idx)] += local_rhs * c_val
+                    global_idx = elem_vdofs[e, i]
+                    P_NC_row = P_NC.getrow(global_idx)
+                    if P_NC_row.nnz > 0:
+                        for c_idx, c_val in zip(P_NC_row.indices, P_NC_row.data):
+                            b_L[int(c_idx)] += local_rhs * c_val
 
         b_aug = np.concatenate([b_L, np.zeros(n_constraints)])
         sol = lu.solve(b_aug)
         phi_L = P_NC @ sol[:n_T]
 
         # Compute volume-averaged flux
-        grad_phi = np.empty((total, 2), dtype=float)
+        grad_phi = np.zeros((total, 2), dtype=float)
         for idx in range(total):
             phi_elem = phi_L[elem_vdofs[idx // nq]]
             e = idx // nq
