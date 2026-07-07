@@ -745,11 +745,22 @@ def effective_conductivity_tensor(
     # BEFORE assembling K; skip the transverse solve entirely if there is no
     # in-plane conduction at all.
     k_inplane_max = float(np.max(np.abs(k_per_gp[:, 1:3, 1:3])))
-    _skip_transverse = k_inplane_max <= 0.0
-    if not _skip_transverse:
-        _floor = 1e-9 * k_inplane_max
-        for _i in (1, 2):
-            np.maximum(k_per_gp[:, _i, _i], _floor, out=k_per_gp[:, _i, _i])
+    if k_inplane_max <= 0.0:
+        # No in-plane conduction at all (or thermal data absent): skip the
+        # 2D solve entirely; only the axial rule-of-mixtures entry is set.
+        k_eff = np.zeros((6, 6), dtype=float)
+        vf = problem.fibre_volume_fraction
+        k_m = problem.materials[problem.matrix_material].thermal_conductivity
+        k_f = problem.materials[problem.fibre_material].thermal_conductivity
+        k_eff[0, 0] = vf * k_f[0, 0] + (1.0 - vf) * k_m[0, 0]
+        return k_eff, {
+            "backend": "mfem_periodic_2d_diffusion",
+            "skipped_transverse": True,
+            "fibre_volume_fraction": vf,
+        }
+    _floor = 1e-9 * k_inplane_max
+    for _i in (1, 2):
+        np.maximum(k_per_gp[:, _i, _i], _floor, out=k_per_gp[:, _i, _i])
 
     # ---- Step 2: build diffusion stiffness matrix ----
     a = mfem.BilinearForm(fespace)
@@ -821,7 +832,7 @@ def effective_conductivity_tensor(
     # ---- Step 4: solve for each transverse direction ----
     k_eff_2d = np.zeros((2, 2), dtype=float)
 
-    for dir_idx in range(2) if not _skip_transverse else []:  # y=0, z=1
+    for dir_idx in range(2):  # y=0, z=1
         applied_grad = np.zeros(2, dtype=float)
         applied_grad[dir_idx] = 1.0
 
