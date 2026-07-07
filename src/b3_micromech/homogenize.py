@@ -44,11 +44,15 @@ class HomogenizationResult:
     effective_conductivity: NDArray[np.float64] | None = None
     metadata: dict = field(default_factory=dict)
 
+    def __post_init__(self) -> None:
+        if self.metadata is None:
+            self.metadata = {}
+
 
 def homogenize(problem: RVEProblem) -> HomogenizationResult:
     """Periodic plane-strain homogenization; returns symmetrised ``(6, 6)`` stiffness, CTE, and k."""
     C_fea, meta = solve_periodic_plane_strain(problem)
-    alpha_eff, thermal_meta = solve_thermal_loadcase(problem)
+    alpha_eff, thermal_meta = solve_thermal_loadcase(problem, c_eff=C_fea)
     meta.update(thermal_meta)
 
     k_eff, k_meta = effective_conductivity_tensor(problem)

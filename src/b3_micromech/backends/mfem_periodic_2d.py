@@ -457,14 +457,17 @@ def solve_periodic_plane_strain(
 
 
 def solve_thermal_loadcase(
-    problem: RVEProblem, *, delta_t: float = 1.0
+    problem: RVEProblem, *, delta_t: float = 1.0,
+    c_eff: NDArray[np.float64] | None = None,
 ) -> tuple[NDArray[np.float64], dict]:
     """One-temperature-rise solve → effective thermal-expansion vector.
 
     Runs a thermal eigenstrain solve (``ΔT = delta_T``) on the RVE,
-    computes the macroscopic stress ``sigma = C_eff : alpha_eff : ΔT``,
-    and returns ``alpha_eff = sigma / ΔT`` (shape ``(6,)``) which is
-    the effective coefficient-of-thermal-expansion vector in Voigt form.
+    computes the volume-averaged thermal stress at zero macroscopic strain
+    ``<sigma> = -C_eff : alpha_eff * ΔT`` and returns
+    ``alpha_eff = -C_eff^{-1} <sigma> / ΔT`` (shape ``(6,)``), the effective
+    coefficient-of-thermal-expansion vector in Voigt form. ``c_eff`` may be
+    passed in (e.g. from the elastic solve) to avoid recomputing it.
 
     Returns the full ``(6,)`` vector ``[alpha_xx, alpha_yy, alpha_zz,
     gamma_yz, gamma_xz, gamma_xy]``.  Only indices 0, 1, 2 (normal
@@ -560,15 +563,17 @@ def solve_thermal_loadcase(
     # --- compute volume-averaged thermal stress ---
     grad_u = _collect_u_gradient_at_gps(u_L, data)
     eps_fluct = grad_to_voigt_strain_plane_strain_x(grad_u)
-    # Total strain = fluctuation (thermal only, no macro strain)
-    eps_total = eps_fluct
 
-    # Volume-averaged thermal stress
-    sigma_per_gp = np.einsum("nij,nj->ni", data.c_per_gp, eps_total)
+    # Constitutive law with thermal eigenstrain: sigma = C : (eps - alpha*dT).
+    # Periodic BC without applied macro strain -> <eps_fluct> = 0, so
+    # <sigma> = -C_eff : alpha_eff * dT.
+    eps_mech = eps_fluct - alpha_per_gp * delta_t
+    sigma_per_gp = np.einsum("nij,nj->ni", data.c_per_gp, eps_mech)
     vol_avg_sigma = (data.gp_weights[:, None] * sigma_per_gp).sum(axis=0) / data.gp_weights.sum()
 
-    # alpha_eff = sigma / delta_T  (delta_T = 1, so same value)
-    alpha_eff = vol_avg_sigma / delta_t
+    if c_eff is None:
+        c_eff, _ = solve_periodic_plane_strain(problem)
+    alpha_eff = -np.linalg.solve(c_eff, vol_avg_sigma) / delta_t
 
     meta = {
         "backend": "mfem_periodic_2d_thermal",
@@ -804,7 +809,14 @@ def effective_conductivity_tensor(
     # ---- Step 4: solve for each transverse direction ----
     k_eff_2d = np.zeros((2, 2), dtype=float)
 
-    for dir_idx in range(2):  # y=0, z=1
+    # Guard: zero in-plane conductivity (e.g. axial-only material data) makes
+    # the diffusion operator singular; the transverse block is simply zero.
+    if not np.any(np.abs(k_per_gp[:, 1:3, 1:3]) > 0.0):
+        _skip_transverse = True
+    else:
+        _skip_transverse = False
+
+    for dir_idx in range(2) if not _skip_transverse else []:  # y=0, z=1
         applied_grad = np.zeros(2, dtype=float)
         applied_grad[dir_idx] = 1.0
 
