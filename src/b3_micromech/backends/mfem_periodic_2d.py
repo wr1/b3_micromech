@@ -739,6 +739,18 @@ def effective_conductivity_tensor(
     # Collect k per GP
     k_per_gp = _collect_k_at_gps(mesh, fespace, problem)
 
+    # Guard: zero in-plane conductivity in any constituent (e.g. axial-only
+    # material data) leaves empty operator rows -> singular factorization.
+    # Floor the in-plane diagonal with a tiny fraction of the global maximum
+    # BEFORE assembling K; skip the transverse solve entirely if there is no
+    # in-plane conduction at all.
+    k_inplane_max = float(np.max(np.abs(k_per_gp[:, 1:3, 1:3])))
+    _skip_transverse = k_inplane_max <= 0.0
+    if not _skip_transverse:
+        _floor = 1e-9 * k_inplane_max
+        for _i in (1, 2):
+            np.maximum(k_per_gp[:, _i, _i], _floor, out=k_per_gp[:, _i, _i])
+
     # ---- Step 2: build diffusion stiffness matrix ----
     a = mfem.BilinearForm(fespace)
     a.AddDomainIntegrator(_make_diffusion_integrator(k_per_gp, type("DummyGPData", (), {
@@ -808,19 +820,6 @@ def effective_conductivity_tensor(
 
     # ---- Step 4: solve for each transverse direction ----
     k_eff_2d = np.zeros((2, 2), dtype=float)
-
-    # Guard: zero in-plane conductivity anywhere (e.g. axial-only material
-    # data) leaves empty operator rows -> singular factorization. Floor the
-    # in-plane block with a tiny fraction of the global maximum; if there is
-    # no in-plane conduction at all, skip the transverse solve entirely.
-    k_inplane_max = float(np.max(np.abs(k_per_gp[:, 1:3, 1:3])))
-    if k_inplane_max <= 0.0:
-        _skip_transverse = True
-    else:
-        _skip_transverse = False
-        _floor = 1e-9 * k_inplane_max
-        for _i in (1, 2):
-            np.maximum(k_per_gp[:, _i, _i], _floor, out=k_per_gp[:, _i, _i])
 
     for dir_idx in range(2) if not _skip_transverse else []:  # y=0, z=1
         applied_grad = np.zeros(2, dtype=float)
