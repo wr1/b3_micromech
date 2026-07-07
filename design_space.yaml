@@ -1,0 +1,310 @@
+# =============================================================================
+# Surrogate Program — Design Space Definition
+# =============================================================================
+# This YAML defines the full parameter space for surrogate training across
+# constituent materials, fibre volume fractions, and weave architectures.
+#
+# Source: Phase 1 of surrogate-program.md (b3_micromech notes/plans/)
+# Created: 2026-07-07
+#
+# Units convention:
+#   Moduli (E, G)    : Pascals (Pa), e.g. 230.0e9 = 230 GPa
+#   Poisson ratios    : dimensionless
+#   Fibre volume frac : dimensionless fraction (0..1)
+#   Temperatures      : Kelvin (K)
+#   Lengths            : metres (m) or metres-per-metre for ratios
+# =============================================================================
+
+version: 1
+description: >
+  Design space for micromechanical surrogate training covering
+  fibres (E-glass, S-glass, C-st Std/IM), matrices (epoxy baseline + tough),
+  Vf ranges per weave architecture (plain, satin, 3D, NCF, braid).
+
+# ---------------------------------------------------------------------------
+# Fibres — transverse isotropic
+# ---------------------------------------------------------------------------
+# Each fibre is described by 5 engineering constants:
+#   E_L  longitudinal Young's modulus
+#   E_T  transverse Young's modulus
+#   G_LT in-plane shear modulus
+#   nu_LT major Poisson ratio (fibre direction -> transverse)
+#   nu_TT minor Poisson ratio (transverse plane)
+fibres:
+
+  - name: E_glass
+    description: "E-glass (electrical grade) continuous fibre"
+    source: "Corning E-glass datasheet, typical values"
+    type: transverse_isotropic
+    e_l: 76.0e9        # Pa — longitudinal modulus
+    e_t: 47.0e9        # Pa — transverse modulus
+    g_lt: 25.0e9       # Pa — shear modulus
+    nu_lt: 0.22        # — Poisson ratio
+    nu_tt: 0.35        # — minor Poisson ratio
+    density_kg_m3: 2540  # kg/m³ (reference)
+
+  - name: S_glass
+    description: "S-glass (structural) high-strength fibre"
+    source: "Corning S-2 Glass datasheet, typical values"
+    type: transverse_isotropic
+    e_l: 285.0e9
+    e_t: 50.0e9
+    g_lt: 55.0e9
+    nu_lt: 0.22
+    nu_tt: 0.35
+    density_kg_m3: 2540
+
+  - name: C_st_std
+    description: "Carbon intermediate modulus, standard"
+    source: "Toray T300 / standard IM carbon typical values"
+    type: transverse_isotropic
+    e_l: 230.0e9
+    e_t: 15.0e9
+    g_lt: 15.0e9
+    nu_lt: 0.20
+    nu_tt: 0.30
+    density_kg_m3: 1760
+
+  - name: C_st_im
+    description: "Carbon intermediate modulus, high modulus variant"
+    source: "Toray T700 / IM7 typical values"
+    type: transverse_isotropic
+    e_l: 295.0e9
+    e_t: 20.0e9
+    g_lt: 20.0e9
+    nu_lt: 0.20
+    nu_tt: 0.30
+    density_kg_m3: 1800
+
+# ---------------------------------------------------------------------------
+# Matrices — isotropic
+# ---------------------------------------------------------------------------
+matrices:
+
+  - name: epoxy_baseline
+    description: "Standard epoxy matrix (e.g. HexPly 8552 / EPON 828)"
+    source: "Typical epoxy datasheet values"
+    type: isotropic
+    youngs_modulus: 3.0e9       # Pa — Young's modulus
+    poisson_ratio: 0.35         # — Poisson ratio
+
+  - name: epoxy_tough
+    description: "Toughened epoxy matrix (e.g. modified epoxy for fracture resistance)"
+    source: "Typical toughened epoxy datasheet values"
+    type: isotropic
+    youngs_modulus: 2.8e9
+    poisson_ratio: 0.40
+
+# ---------------------------------------------------------------------------
+# Weave architectures
+# ---------------------------------------------------------------------------
+# Each architecture lists:
+#   code          — integer code matching weave_registry.py WEAVE_CODES
+#   parameter_bounds — per-parameter [min, max] for sweep space
+#   typical       — representative values for a default config
+#
+# All bounds are dimensionless unless noted.
+weave_architectures:
+
+  - name: plain
+    code: 0
+    description: "Plain weave — 1/1 interlacing pattern"
+    parameter_bounds:
+      weave_period_n_warp: [3.0, 30.0]     # number of yarns in repeat (warp direction)
+      weave_period_n_weft: [3.0, 30.0]     # number of yarns in repeat (weft direction)
+      crimp_amplitude: [0.01, 0.15]         # yarn crimp amplitude (dimensionless)
+    typical:
+      weave_period_n_warp: 6.0
+      weave_period_n_weft: 6.0
+      crimp_amplitude: 0.06
+
+  - name: satin
+    code: 2
+    description: "Satin weave — long float length, smooth surface"
+    parameter_bounds:
+      weave_period_n_warp: [4.0, 30.0]
+      weave_period_n_weft: [4.0, 30.0]
+      crimp_amplitude: [0.005, 0.08]
+    typical:
+      weave_period_n_warp: 8.0
+      weave_period_n_weft: 8.0
+      crimp_amplitude: 0.03
+
+  - name: 3d_orthogonal
+    code: 4
+    description: "3D orthogonal weave — warp yarns interlaced through all layers"
+    parameter_bounds:
+      weave_period_n_warp: [3.0, 20.0]
+      weave_period_n_weft: [3.0, 20.0]
+      binder_ratio: [0.05, 0.40]            # fraction of yarns that are binders
+    typical:
+      weave_period_n_warp: 6.0
+      weave_period_n_weft: 6.0
+      binder_ratio: 0.20
+
+  - name: ncf
+    code: 6
+    description: "Non-crimp fabric — multiple fibre layers stitched together"
+    parameter_bounds:
+      weave_period_n_warp: [1.0, 20.0]     # essentially ply stacking sequence length
+      weave_period_n_weft: [1.0, 20.0]
+      ncf_ply_angle_max: [30.0, 90.0]      # maximum off-axis ply angle (degrees)
+    typical:
+      weave_period_n_warp: 4.0
+      weave_period_n_weft: 1.0
+      ncf_ply_angle_max: 45.0
+
+  - name: braid
+    code: 7
+    description: "Braid architecture — interlaced fibres at an angle"
+    parameter_bounds:
+      braid_angle_deg: [15.0, 75.0]         # braid angle relative to longitudinal axis (degrees)
+    typical:
+      braid_angle_deg: 45.0
+
+# ---------------------------------------------------------------------------
+# Fibre volume fraction ranges per weave
+# ---------------------------------------------------------------------------
+# Realistic Vf limits vary by architecture due to packing constraints.
+vf_ranges:
+
+  - weave: plain
+    vf_min: 0.30
+    vf_max: 0.65
+    comment: "Plain weaves have crimp that limits packing; 0.60-0.65 is typical max"
+
+  - weave: satin
+    vf_min: 0.40
+    vf_max: 0.70
+    comment: "Satin weaves with long floats allow higher Vf"
+
+  - weave: 3d_orthogonal
+    vf_min: 0.30
+    vf_max: 0.55
+    comment: "Binder yarns reduce max Vf"
+
+  - weave: ncf
+    vf_min: 0.55
+    vf_max: 0.75
+    comment: "NCFs can achieve very high Vf (near dry fabric)"
+
+  - weave: braid
+    vf_min: 0.35
+    vf_max: 0.65
+    comment: "Braid angle affects packing; higher angles lower max Vf"
+
+# ---------------------------------------------------------------------------
+# Sweep presets
+# ---------------------------------------------------------------------------
+# Each preset defines a slice of the full hypercube for targeted data generation.
+# The "full" preset is intentionally small; the full sweep is too expensive.
+sweep_presets:
+
+  - name: full
+    description: >
+      Full factorial across all fibres, matrices, weaves, and a single Vf
+      representative point per architecture. Useful for initial sanity checks
+      and architecture validation.
+    config:
+      sweep:
+        # Sweep dimensions (values = discrete levels; value = single)
+        vf:
+          linspace: [0.35, 0.65, 5]    # 5 Vf points per architecture
+        E_m:
+          value: 3.0e9                 # baseline epoxy
+        nu_m:
+          value: 0.35                  # baseline epoxy Poisson
+        E_Lf:
+          values: [230.0e9, 285.0e9, 295.0e9]  # C_st_std, S_glass, C_st_im
+        E_Tf:
+          values: [15.0e9, 20.0e9]     # C_st_std, C_st_im
+        G_LTf:
+          values: [15.0e9, 20.0e9, 55.0e9]    # C_st_std, C_st_im, S_glass
+        nu_LTf:
+          value: 0.20                  # standard for all fibres
+        G_TTf:
+          value: 6.0e9                 # conservative
+      # One sweep entry per weave architecture
+      weave_architectures: ["plain", "satin", "3d_orthogonal", "ncf", "braid"]
+
+  - name: constituent_focus
+    description: >
+      Sweeps matrix modulus (E_m) and fibre longitudinal modulus (E_Lf) for
+      a single weave, keeping all other params at typical values.
+      Tests surrogate sensitivity to constituent properties.
+    config:
+      sweep:
+        vf:
+          value: 0.50
+        E_m:
+          linspace: [2.5e9, 3.5e9, 5]
+        nu_m:
+          value: 0.35
+        E_Lf:
+          linspace: [200.0e9, 350.0e9, 6]
+        E_Tf:
+          value: 15.0e9
+        G_LTf:
+          value: 15.0e9
+        nu_LTf:
+          value: 0.20
+        G_TTf:
+          value: 6.0e9
+      weave_architectures: ["plain"]
+
+  - name: weave_sensitivity
+    description: >
+      Sweeps weave geometry parameters (crimp, period, braid angle) for a
+      single fibre/matrix pair. Tests the geometry feature channel.
+    config:
+      sweep:
+        vf:
+          value: 0.50
+        E_m:
+          value: 3.0e9
+        nu_m:
+          value: 0.35
+        E_Lf:
+          value: 230.0e9
+        E_Tf:
+          value: 15.0e9
+        G_LTf:
+          value: 15.0e9
+        nu_LTf:
+          value: 0.20
+        G_TTf:
+          value: 6.0e9
+      weave_architectures: ["plain", "satin", "braid"]
+
+# ---------------------------------------------------------------------------
+# Domain and solver defaults
+# ---------------------------------------------------------------------------
+# These are applied to all sweeps unless overridden in a preset.
+domain:
+  size: 1.0
+  mesh_resolution: [24, 24]
+
+periodic_tolerance: 1.0e-8
+
+solver:
+  cell_type: quadrilateral
+
+# ---------------------------------------------------------------------------
+# RVE defaults
+# ---------------------------------------------------------------------------
+rve:
+  fibre_volume_fraction: 0.50
+  matrix_material: matrix_default
+  fibre_material: fibre_default
+
+# ---------------------------------------------------------------------------
+# Solver and RVE override section for b3_tex 3D RVE runs
+# ---------------------------------------------------------------------------
+# b3_tex runs 3D weave RVEs. The same design_space.yaml is consumed, but
+# the runner maps these definitions to b3_tex's geometry generator.
+# This section is a placeholder for the b3_tex runner's config mapping.
+b3_tex_mapping:
+  vf_source: vf_ranges      # use vf_ranges to constrain b3_tex Vf
+  fibres_source: fibres     # fibre params → b3_tex constituent materials
+  matrices_source: matrices # matrix params → b3_tex matrix material
+  weaves_source: weave_architectures  # architecture → b3_tex generator
