@@ -643,26 +643,28 @@ def _make_diffusion_integrator(k_per_gp: NDArray[np.float64], data: _ElementGPDa
             e = T.ElementNo
             elmat.SetSize(nd)
             local = np.zeros((nd, nd), dtype=float)
+            ir = mfem.IntRules.Get(fe.GetGeomType(), 2 * fe.GetOrder())
             for q in range(nq):
                 dsh = data.gp_dshapes[e * nq + q]  # (nd, 2) ref coords
                 w = data.gp_weights[e * nq + q]
                 k_val = k_per_gp[e * nq + q]  # (6, 6)
 
                 # Transform dshape to physical coords
-                J = mfem.DenseMatrix(2, 2)
-                T.Jacobian(J)
+                ip = ir.IntPoint(q)
+                T.SetIntPoint(ip)
+                J = T.Jacobian()
                 J_inv = mfem.DenseMatrix(2, 2)
                 mfem.CalcInverse(J, J_inv)
 
                 dsh_phys = np.empty((nd, 2), dtype=float)
                 for i_row in range(nd):
                     dsh_phys[i_row, 0] = (
-                        dsh[i_row, 0] * float(J_inv.Address(0, 0))
-                        + dsh[i_row, 1] * float(J_inv.Address(0, 1))
+                        dsh[i_row, 0] * float(J_inv[0, 0])
+                        + dsh[i_row, 1] * float(J_inv[0, 1])
                     )
                     dsh_phys[i_row, 1] = (
-                        dsh[i_row, 0] * float(J_inv.Address(1, 0))
-                        + dsh[i_row, 1] * float(J_inv.Address(1, 1))
+                        dsh[i_row, 0] * float(J_inv[1, 0])
+                        + dsh[i_row, 1] * float(J_inv[1, 1])
                     )
 
                 # Transverse-plane conductivity: k[0:2, 0:2] in (y, z)
@@ -828,13 +830,12 @@ def effective_conductivity_tensor(
         b_L = np.zeros(n_T, dtype=float)
         for e in range(n_elem):
             T = mesh.GetElementTransformation(e)
-            J = mfem.DenseMatrix(2, 2)
             J_inv = mfem.DenseMatrix(2, 2)
             for q in range(nq):
                 idx = e * nq + q
                 ip = ir0.IntPoint(q)
                 T.SetIntPoint(ip)
-                T.Jacobian(J)
+                J = T.Jacobian()
                 mfem.CalcInverse(J, J_inv)
 
                 k_val = k_per_gp[idx]
@@ -845,12 +846,12 @@ def effective_conductivity_tensor(
                 dsh_phys = np.empty((nd, 2), dtype=float)
                 for i_row in range(nd):
                     dsh_phys[i_row, 0] = (
-                        dsh_ref[i_row, 0] * float(J_inv.Address(0, 0))
-                        + dsh_ref[i_row, 1] * float(J_inv.Address(0, 1))
+                        dsh_ref[i_row, 0] * float(J_inv[0, 0])
+                        + dsh_ref[i_row, 1] * float(J_inv[0, 1])
                     )
                     dsh_phys[i_row, 1] = (
-                        dsh_ref[i_row, 0] * float(J_inv.Address(1, 0))
-                        + dsh_ref[i_row, 1] * float(J_inv.Address(1, 1))
+                        dsh_ref[i_row, 0] * float(J_inv[1, 0])
+                        + dsh_ref[i_row, 1] * float(J_inv[1, 1])
                     )
 
                 w = gp_weights[idx]
