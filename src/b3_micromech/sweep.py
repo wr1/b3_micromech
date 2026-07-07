@@ -99,6 +99,14 @@ def _apply_point(base: dict[str, Any], point: dict[str, float]) -> RVEProblem:
     ):
         if key in point:
             materials["fibre"][mat_key] = point[key]
+    for key, mat_key in (
+        ("k_l", "k_l"),
+        ("k_t", "k_t"),
+        ("alpha_l", "alpha_l"),
+        ("alpha_t", "alpha_t"),
+    ):
+        if key in point:
+            materials["fibre"][mat_key] = point[key]
     cfg["materials"] = list(materials.values())
 
     if "mesh" in cfg.get("sweep", {}):
