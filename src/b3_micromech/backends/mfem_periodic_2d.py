@@ -645,27 +645,11 @@ def _make_diffusion_integrator(k_per_gp: NDArray[np.float64], data: _ElementGPDa
             local = np.zeros((nd, nd), dtype=float)
             ir = mfem.IntRules.Get(fe.GetGeomType(), 2 * fe.GetOrder())
             for q in range(nq):
-                dsh = data.gp_dshapes[e * nq + q]  # (nd, 2) ref coords
+                # gp_dshapes are stored ALREADY in physical coords (see
+                # _precompute: Mult(dshape_ref, J_inv, dshape_phys)).
+                dsh_phys = data.gp_dshapes[e * nq + q]  # (nd, 2) physical
                 w = data.gp_weights[e * nq + q]
                 k_val = k_per_gp[e * nq + q]  # (6, 6)
-
-                # Transform dshape to physical coords
-                ip = ir.IntPoint(q)
-                T.SetIntPoint(ip)
-                J = T.Jacobian()
-                J_inv = mfem.DenseMatrix(2, 2)
-                mfem.CalcInverse(J, J_inv)
-
-                dsh_phys = np.empty((nd, 2), dtype=float)
-                for i_row in range(nd):
-                    dsh_phys[i_row, 0] = (
-                        dsh[i_row, 0] * float(J_inv[0, 0])
-                        + dsh[i_row, 1] * float(J_inv[0, 1])
-                    )
-                    dsh_phys[i_row, 1] = (
-                        dsh[i_row, 0] * float(J_inv[1, 0])
-                        + dsh[i_row, 1] * float(J_inv[1, 1])
-                    )
 
                 # Transverse-plane conductivity: k[0:2, 0:2] in (y, z)
                 k_2d = k_val[1:3, 1:3]
@@ -829,30 +813,15 @@ def effective_conductivity_tensor(
         # Assemble RHS: f_i = -∫ k · g · ∇ψ dV
         b_L = np.zeros(n_T, dtype=float)
         for e in range(n_elem):
-            T = mesh.GetElementTransformation(e)
-            J_inv = mfem.DenseMatrix(2, 2)
             for q in range(nq):
                 idx = e * nq + q
-                ip = ir0.IntPoint(q)
-                T.SetIntPoint(ip)
-                J = T.Jacobian()
-                mfem.CalcInverse(J, J_inv)
 
                 k_val = k_per_gp[idx]
                 k_2d = k_val[1:3, 1:3]
                 rhs_vec = k_2d @ applied_grad
 
-                dsh_ref = gp_dshapes[idx]
-                dsh_phys = np.empty((nd, 2), dtype=float)
-                for i_row in range(nd):
-                    dsh_phys[i_row, 0] = (
-                        dsh_ref[i_row, 0] * float(J_inv[0, 0])
-                        + dsh_ref[i_row, 1] * float(J_inv[0, 1])
-                    )
-                    dsh_phys[i_row, 1] = (
-                        dsh_ref[i_row, 0] * float(J_inv[1, 0])
-                        + dsh_ref[i_row, 1] * float(J_inv[1, 1])
-                    )
+                # gp_dshapes are stored ALREADY in physical coords.
+                dsh_phys = gp_dshapes[idx]
 
                 w = gp_weights[idx]
                 for i in range(nd):
