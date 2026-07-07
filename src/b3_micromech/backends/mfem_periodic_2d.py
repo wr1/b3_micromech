@@ -888,7 +888,7 @@ def effective_conductivity_tensor(
         total_grad = grad_phi + applied_grad  # (total, 2)
         q_per_gp = np.empty((total, 2), dtype=float)
         for idx in range(total):
-            k_val = k_per_gp[idx][:2, :2]
+            k_val = k_per_gp[idx][1:3, 1:3]
             q_per_gp[idx] = -(k_val @ total_grad[idx])
 
         q_vol = (gp_weights[:, None] * q_per_gp).sum(axis=0) / gp_weights.sum()
