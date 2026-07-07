@@ -876,7 +876,7 @@ def effective_conductivity_tensor(
             T = mesh.GetElementTransformation(e)
             ip = ir0.IntPoint(idx % nq)
             T.SetIntPoint(ip)
-            T.Jacobian(J)
+            J = T.Jacobian()
             mfem.CalcInverse(J, J_inv)
             fe = fespace.GetFE(e)
             fe.CalcDShape(ip, dshape_ref)
