@@ -902,7 +902,8 @@ def effective_conductivity_tensor(
 
     # ---- Step 5: embed in (6,6) Voigt form ----
     k_eff = np.zeros((6, 6), dtype=float)
-    k_eff[:2, :2] = k_eff_2d
+    # 2D solve lives in the transverse (y, z) plane -> tensor indices 1, 2
+    k_eff[1:3, 1:3] = k_eff_2d
 
     # Fibre-direction (xx): rule-of-mixtures (decoupled in 2D)
     vf = problem.fibre_volume_fraction
