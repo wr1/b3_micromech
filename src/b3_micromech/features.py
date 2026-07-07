@@ -13,6 +13,8 @@ from b3_micromech.tensors import engineering_constants_transverse_iso
 
 class _StiffnessMaterial(Protocol):
     stiffness: NDArray[np.float64]
+    thermal_conductivity: NDArray[np.float64]
+    thermal_expansion: NDArray[np.float64]
 
 
 def constituent_engineering_constants(
@@ -33,6 +35,23 @@ def constituent_engineering_constants(
     )
 
 
+def constituent_thermal_properties(
+    matrix: _StiffnessMaterial,
+    fibre: _StiffnessMaterial,
+) -> tuple[float, float, float, float]:
+    """Return ``(alpha_m, alpha_Lf, alpha_Tf, k_m)``.
+
+    *alpha_m* – matrix CTE (transverse, index 1 of ``[α,α,α,0,0,0]``).
+    *alpha_Lf / alpha_Tf* – fibre longitudinal / transverse CTE.
+    *k_m* – matrix isotropic thermal conductivity (``k[0,0]``).
+    """
+    a_m = float(matrix.thermal_expansion[1])  # alpha_yy
+    a_Lf = float(fibre.thermal_expansion[0])   # alpha_xx (fibre axis)
+    a_Tf = float(fibre.thermal_expansion[1])   # alpha_yy (transverse)
+    k_m = float(matrix.thermal_conductivity[0, 0])
+    return a_m, a_Lf, a_Tf, k_m
+
+
 def build_feature_matrix(
     vf: NDArray[np.float64],
     *,
@@ -45,11 +64,24 @@ def build_feature_matrix(
     G_LTf: float | None = None,
     nu_LTf: float | None = None,
     G_TTf: float | None = None,
+    alpha_m: float | None = None,
+    alpha_Lf: float | None = None,
+    alpha_Tf: float | None = None,
+    k_m: float | None = None,
 ) -> NDArray[np.float64]:
-    """Build ``(N, 8)`` feature rows ``[Vf, E_m, nu_m, E_Lf, E_Tf, G_LTf, nu_LTf, G_TTf]``."""
+    """Build ``(N, 12)`` feature rows for the stiffness / thermal surrogate.
+
+    The first 8 columns are the existing mechanical features
+    ``[Vf, E_m, nu_m, E_Lf, E_Tf, G_LTf, nu_LTf, G_TTf]``.
+    The last 4 columns are the thermal features
+    ``[alpha_m, alpha_Lf, alpha_Tf, k_m]``.
+    """
     vf_arr = np.asarray(vf, dtype=float).ravel()
     if matrix is not None and fibre is not None:
         em, num, elf, etf, gltf, nultf, gttf = constituent_engineering_constants(
+            matrix, fibre
+        )
+        a_m, a_Lf, a_Tf, k_m_val = constituent_thermal_properties(
             matrix, fibre
         )
     else:
@@ -59,8 +91,18 @@ def build_feature_matrix(
                 "provide matrix and fibre, or all seven constituent scalars"
             )
         em, num, elf, etf, gltf, nultf, gttf = (float(v) for v in scalars)  # type: ignore[misc]
+        if (alpha_m is None) != (alpha_Lf is None) != (alpha_Tf is None) != (k_m is None):
+            raise ValueError(
+                "provide all four thermal scalars (alpha_m, alpha_Lf, alpha_Tf, k_m) or None"
+            )
+        a_m, a_Lf, a_Tf, k_m_val = (
+            float(alpha_m) if alpha_m is not None else 0.0,
+            float(alpha_Lf) if alpha_Lf is not None else 0.0,
+            float(alpha_Tf) if alpha_Tf is not None else 0.0,
+            float(k_m) if k_m is not None else 0.0,
+        )
     n = vf_arr.shape[0]
-    out = np.empty((n, 8), dtype=float)
+    out = np.empty((n, 12), dtype=float)
     out[:, 0] = vf_arr
     out[:, 1] = em
     out[:, 2] = num
@@ -69,7 +111,39 @@ def build_feature_matrix(
     out[:, 5] = gltf
     out[:, 6] = nultf
     out[:, 7] = gttf
+    out[:, 8] = a_m
+    out[:, 9] = a_Lf
+    out[:, 10] = a_Tf
+    out[:, 11] = k_m_val
     return out
+
+
+def _build_mech_features_matrix(
+    vf: NDArray[np.float64],
+    *,
+    matrix: _StiffnessMaterial | None = None,
+    fibre: _StiffnessMaterial | None = None,
+    E_m: float | None = None,
+    nu_m: float | None = None,
+    E_Lf: float | None = None,
+    E_Tf: float | None = None,
+    G_LTf: float | None = None,
+    nu_LTf: float | None = None,
+    G_TTf: float | None = None,
+) -> NDArray[np.float64]:
+    """Backwards-compatible ``(N, 8)`` feature rows (mechanical only)."""
+    return build_feature_matrix(
+        vf,
+        matrix=matrix,
+        fibre=fibre,
+        E_m=E_m,
+        nu_m=nu_m,
+        E_Lf=E_Lf,
+        E_Tf=E_Tf,
+        G_LTf=G_LTf,
+        nu_LTf=nu_LTf,
+        G_TTf=G_TTf,
+    )[:, :8]
 
 
 def features_out_of_bounds(
@@ -81,8 +155,8 @@ def features_out_of_bounds(
     if x.ndim == 1:
         x = x[None, :]
     b = np.asarray(bounds, dtype=float)
-    if b.shape != (8, 2):
-        raise ValueError(f"bounds must have shape (8, 2), got {b.shape}")
+    if b.shape != (12, 2):
+        raise ValueError(f"bounds must have shape (12, 2), got {b.shape}")
     below = x < b[:, 0]
     above = x > b[:, 1]
     return np.any(below | above, axis=1)

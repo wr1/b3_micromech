@@ -15,6 +15,7 @@ from numpy.typing import NDArray
 from b3_micromech.features import (
     build_feature_matrix,
     constituent_engineering_constants,
+    constituent_thermal_properties,
     warn_if_out_of_bounds,
 )
 from b3_micromech.lut_cache import (
@@ -39,6 +40,9 @@ def _sweep_point_from_materials(vf: float, matrix: Any, fibre: Any) -> dict[str,
     em, num, elf, etf, gltf, nultf, gttf = constituent_engineering_constants(
         matrix, fibre
     )
+    a_m, a_Lf, a_Tf, k_m_val = constituent_thermal_properties(
+        matrix, fibre
+    )
     return {
         "vf": float(vf),
         "E_m": em,
@@ -48,6 +52,10 @@ def _sweep_point_from_materials(vf: float, matrix: Any, fibre: Any) -> dict[str,
         "G_LTf": gltf,
         "nu_LTf": nultf,
         "G_TTf": gttf,
+        "alpha_m": a_m,
+        "alpha_Lf": a_Lf,
+        "alpha_Tf": a_Tf,
+        "k_m": k_m_val,
     }
 
 
