@@ -81,6 +81,7 @@ def test_triangular_barycentric_grid_sampler():
 
 @pytest.mark.mfem
 def test_hex_domain_amr_refines_and_solves():
+    pytest.importorskip("triangle")
     from b3_micromech.homogenize import homogenize
     from b3_micromech.mesh.build import build_mesh
 

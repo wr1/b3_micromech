@@ -118,6 +118,7 @@ def test_hexagon_periodic_pairing_covers_opposite_edges():
 
 
 def test_homogeneous_matrix_recovers_stiffness_on_hex():
+    pytest.importorskip("triangle")
     problem = RVEProblem.from_config(_hex_homogeneous_config(edge_divisions=14))
     result = homogenize(problem)
     C = result.effective_stiffness
