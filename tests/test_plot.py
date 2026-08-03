@@ -1,12 +1,33 @@
 import numpy as np
 import pytest
 
+from b3_micromech.plot import cell_areas_yz
 from b3_micromech.result import LOADCASE_LABELS
 from b3_micromech.tensors import macro_displacement_at_yz, von_mises_voigt
 
 
 def test_loadcase_label_count():
     assert len(LOADCASE_LABELS) == 6
+
+
+def test_cell_areas_yz_two_triangles_unit_square():
+    """Two right triangles covering the unit square each have area 0.5."""
+    vertices = np.array(
+        [[0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 1.0]],
+        dtype=float,
+    )
+    cells = [[0, 1, 2], [0, 2, 3]]
+    areas = cell_areas_yz(vertices, cells)
+    np.testing.assert_allclose(areas, [0.5, 0.5], rtol=1e-12)
+
+
+def test_cell_areas_yz_quad():
+    vertices = np.array(
+        [[0.0, 0.0], [2.0, 0.0], [2.0, 1.0], [0.0, 1.0]],
+        dtype=float,
+    )
+    areas = cell_areas_yz(vertices, [[0, 1, 2, 3]])
+    np.testing.assert_allclose(areas, [2.0], rtol=1e-12)
 
 
 def test_macro_displacement_affine():

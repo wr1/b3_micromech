@@ -1,4 +1,8 @@
-"""Matplotlib plots for RVE geometry and per-loadcase deformation patterns."""
+"""Matplotlib plots for RVE geometry and per-loadcase deformation patterns.
+
+Style aims at dense AMR meshes: thin cell edges so refinement topology stays
+readable, soft charcoal edges rather than heavy black outlines.
+"""
 
 from __future__ import annotations
 
@@ -13,6 +17,16 @@ from b3_micromech.mesh.cartesian import mesh_vertices_and_cells
 from b3_micromech.postprocess import LoadcaseSet
 from b3_micromech.result import LOADCASE_LABELS
 from b3_micromech.tensors import engineering_constants_transverse_iso
+
+# Publication-ish, dense-mesh friendly line weights.
+MESH_EDGE_LW = 0.15
+MESH_EDGE_COLOR = "#4a4a4a"
+DOMAIN_OUTLINE_LW = 0.8
+DOMAIN_OUTLINE_COLOR = "#1a1a1a"
+FIBRE_OUTLINE_LW = 0.7
+SCATTER_SIZE = 8
+QUIVER_WIDTH = 0.002
+SAVE_DPI = 180
 
 
 def _require_matplotlib():
@@ -50,15 +64,37 @@ def _draw_domain_outline(ax, problem) -> None:
             Polygon(
                 corners,
                 fill=False,
-                edgecolor="#1a1a1a",
-                linewidth=1.2,
+                edgecolor=DOMAIN_OUTLINE_COLOR,
+                linewidth=DOMAIN_OUTLINE_LW,
                 linestyle="-",
                 zorder=2,
             )
         )
     else:
         ymax, zmax = problem.size_yz
-        ax.plot([0, ymax, ymax, 0, 0], [0, 0, zmax, zmax, 0], color="#1a1a1a", lw=1.2)
+        ax.plot(
+            [0, ymax, ymax, 0, 0],
+            [0, 0, zmax, zmax, 0],
+            color=DOMAIN_OUTLINE_COLOR,
+            lw=DOMAIN_OUTLINE_LW,
+        )
+
+
+def _draw_fibre_outline(ax, problem, *, edgecolor: str = DOMAIN_OUTLINE_COLOR) -> None:
+    from matplotlib.patches import Circle
+
+    cy, cz, r = _fibre_circle(problem)
+    ax.add_patch(
+        Circle(
+            (cy, cz),
+            r,
+            fill=False,
+            edgecolor=edgecolor,
+            linewidth=FIBRE_OUTLINE_LW,
+            linestyle="--",
+            zorder=3,
+        )
+    )
 
 
 def _auto_scale(loadcases: LoadcaseSet, fraction: float = 0.12) -> float:
@@ -71,7 +107,35 @@ def _auto_scale(loadcases: LoadcaseSet, fraction: float = 0.12) -> float:
     return fraction * loadcases.problem.domain_size / max_mag
 
 
-def _draw_mesh_cells(ax, vertices, cells, facecolors, edgecolor="#333333", lw=0.4):
+def cell_areas_yz(
+    vertices: NDArray[np.float64],
+    cells: list | NDArray[np.intp],
+) -> NDArray[np.float64]:
+    """Signed-absolute polygon areas in the y–z plane (shoelace).
+
+    Works for triangles and quads (and general simple polygons).
+    """
+    verts = np.asarray(vertices, dtype=float)
+    areas = np.empty(len(cells), dtype=float)
+    for i, cell in enumerate(cells):
+        poly = verts[np.asarray(cell, dtype=np.intp)]
+        y = poly[:, 0]
+        z = poly[:, 1]
+        areas[i] = 0.5 * abs(
+            float(np.dot(y, np.roll(z, -1)) - np.dot(z, np.roll(y, -1)))
+        )
+    return areas
+
+
+def _draw_mesh_cells(
+    ax,
+    vertices,
+    cells,
+    facecolors,
+    *,
+    edgecolor: str = MESH_EDGE_COLOR,
+    lw: float = MESH_EDGE_LW,
+):
     from matplotlib.collections import PolyCollection
 
     polys = [vertices[cell] for cell in cells]
@@ -89,11 +153,18 @@ def _amr_enabled(problem) -> bool:
     return bool(_resolve_amr_spec(problem.solver).get("enabled", False))
 
 
+def _finish_mesh_axes(ax, problem) -> None:
+    _draw_domain_outline(ax, problem)
+    ax.set_aspect("equal")
+    _set_plot_limits(ax, problem)
+    ax.set_xlabel("y")
+    ax.set_ylabel("z")
+
+
 def plot_amr_refinement(loadcases: LoadcaseSet, out_path: str | Path) -> Path:
-    """Mesh coloured by the AMR stiffness-jump marker (post-refinement)."""
+    """Dual-panel AMR figure: grid refinement (cell size) + stiffness-jump marker."""
     plt = _require_matplotlib()
     from matplotlib.collections import PolyCollection
-    from matplotlib.patches import Circle
 
     problem = loadcases.problem
     amr = _resolve_amr_spec(problem.solver)
@@ -107,39 +178,61 @@ def plot_amr_refinement(loadcases: LoadcaseSet, out_path: str | Path) -> Path:
 
     vertices, cells = mesh_vertices_and_cells(mesh)
     polys = [vertices[cell] for cell in cells]
+    areas = cell_areas_yz(vertices, cells)
+    area_max = float(np.max(areas)) if areas.size else 1.0
+    if area_max <= 0.0:
+        area_max = 1.0
+    # Relative log size: fine cells → more negative → darker under inverted cmap.
+    rel_log_area = np.log10(np.maximum(areas / area_max, 1e-16))
+    area_ratio = (
+        float(area_max / max(float(np.min(areas)), 1e-30)) if areas.size else 1.0
+    )
     threshold = amr["threshold"]
+    n_cells = int(mesh.GetNE())
 
-    fig, ax = plt.subplots(figsize=(5.5, 5.5), constrained_layout=True)
-    coll = PolyCollection(
+    fig, (ax_size, ax_mark) = plt.subplots(
+        1, 2, figsize=(10.5, 5.0), constrained_layout=True
+    )
+
+    coll_size = PolyCollection(
+        polys,
+        array=rel_log_area,
+        cmap="cividis_r",
+        edgecolors=MESH_EDGE_COLOR,
+        linewidths=MESH_EDGE_LW,
+    )
+    ax_size.add_collection(coll_size)
+    _draw_fibre_outline(ax_size, problem)
+    _finish_mesh_axes(ax_size, problem)
+    ax_size.set_title("Grid refinement (cell size)")
+    cbar_size = fig.colorbar(coll_size, ax=ax_size, shrink=0.85)
+    cbar_size.set_label(r"$\log_{10}(A / A_{\mathrm{max}})$")
+
+    coll_mark = PolyCollection(
         polys,
         array=metric,
         cmap="magma",
-        edgecolors="#333333",
-        linewidths=0.35,
+        edgecolors=MESH_EDGE_COLOR,
+        linewidths=MESH_EDGE_LW,
     )
-    coll.set_clim(0.0, max(float(metric.max()), threshold))
-    ax.add_collection(coll)
-    _draw_domain_outline(ax, problem)
-    cy, cz, r = _fibre_circle(problem)
-    ax.add_patch(
-        Circle(
-            (cy, cz), r, fill=False, edgecolor="#ffffff", linewidth=1.2, linestyle="--"
-        )
+    coll_mark.set_clim(0.0, max(float(metric.max()), threshold))
+    ax_mark.add_collection(coll_mark)
+    _draw_fibre_outline(ax_mark, problem, edgecolor="#ffffff")
+    _finish_mesh_axes(ax_mark, problem)
+    ax_mark.set_title(f"AMR marker ({amr['marker']})")
+    cbar_mark = fig.colorbar(coll_mark, ax=ax_mark, shrink=0.85)
+    cbar_mark.ax.axhline(threshold, color="#4fc3f7", linewidth=1.0, linestyle="--")
+    cbar_mark.set_label("stiffness-jump score")
+
+    fig.suptitle(
+        f"AMR  {n_cells} cells  ·  max/min area = {area_ratio:.1f}×  ·  "
+        f"threshold = {threshold:g}",
+        fontsize=11,
     )
-    ax.set_aspect("equal")
-    _set_plot_limits(ax, problem)
-    ax.set_xlabel("y")
-    ax.set_ylabel("z")
-    ax.set_title(
-        f"AMR marker ({amr['marker']})  {mesh.GetNE()} cells, threshold={threshold:g}"
-    )
-    cbar = fig.colorbar(coll, ax=ax, shrink=0.85)
-    cbar.ax.axhline(threshold, color="#4fc3f7", linewidth=1.5, linestyle="--")
-    cbar.set_label("stiffness-jump score")
 
     out = Path(out_path)
     out.parent.mkdir(parents=True, exist_ok=True)
-    fig.savefig(out, dpi=160)
+    fig.savefig(out, dpi=SAVE_DPI)
     plt.close(fig)
     return out
 
@@ -147,7 +240,6 @@ def plot_amr_refinement(loadcases: LoadcaseSet, out_path: str | Path) -> Path:
 def plot_rve_overview(loadcases: LoadcaseSet, out_path: str | Path) -> Path:
     """Undeformed transverse mesh with fibre disc."""
     plt = _require_matplotlib()
-    from matplotlib.patches import Circle
 
     problem = loadcases.problem
     vertices, cells = mesh_vertices_and_cells(loadcases.session.mesh)
@@ -155,31 +247,23 @@ def plot_rve_overview(loadcases: LoadcaseSet, out_path: str | Path) -> Path:
 
     fig, ax = plt.subplots(figsize=(5.5, 5.5), constrained_layout=True)
     _draw_mesh_cells(ax, vertices, cells, facecolors)
-    cy, cz, r = _fibre_circle(problem)
-    ax.add_patch(
-        Circle(
-            (cy, cz), r, fill=False, edgecolor="#1a1a1a", linewidth=1.5, linestyle="--"
-        )
-    )
-    _draw_domain_outline(ax, problem)
-    ax.set_aspect("equal")
-    _set_plot_limits(ax, problem)
-    ax.set_xlabel("y")
-    ax.set_ylabel("z")
+    _draw_fibre_outline(ax, problem)
+    _finish_mesh_axes(ax, problem)
     shape = problem.domain_shape
     mesh = loadcases.session.mesh
-    res_tag = (
-        f"AMR {mesh.GetNE()} cells"
-        if _amr_enabled(problem)
-        else f"{problem.mesh_resolution[0]}×{problem.mesh_resolution[1]}"
-    )
+    if _amr_enabled(problem):
+        areas = cell_areas_yz(vertices, cells)
+        ratio = float(np.max(areas) / max(float(np.min(areas)), 1e-30))
+        res_tag = f"AMR {mesh.GetNE()} cells, A_max/A_min={ratio:.1f}×"
+    else:
+        res_tag = f"{problem.mesh_resolution[0]}×{problem.mesh_resolution[1]}"
     ax.set_title(
         f"Transverse RVE ({shape})  (Vf={problem.fibre_volume_fraction:.2f}, "
         f"{res_tag} {problem.cell_type})"
     )
     out = Path(out_path)
     out.parent.mkdir(parents=True, exist_ok=True)
-    fig.savefig(out, dpi=160)
+    fig.savefig(out, dpi=SAVE_DPI)
     plt.close(fig)
     return out
 
@@ -197,7 +281,6 @@ def _plot_loadcase_panel(
     mode: str = "in_plane",
 ):
     from matplotlib.collections import PolyCollection
-    from matplotlib.patches import Circle
 
     u = result.u_at_vertices
     if mode == "in_plane":
@@ -222,8 +305,8 @@ def _plot_loadcase_panel(
         PolyCollection(
             polys,
             facecolors=facecolors,
-            edgecolors="#222222",
-            linewidths=0.35,
+            edgecolors=MESH_EDGE_COLOR,
+            linewidths=MESH_EDGE_LW,
             alpha=0.55,
         )
     )
@@ -235,7 +318,7 @@ def _plot_loadcase_panel(
         def_y,
         def_z,
         c=values,
-        s=14,
+        s=SCATTER_SIZE,
         cmap=cmap,
         vmin=vmin,
         vmax=vmax,
@@ -253,16 +336,11 @@ def _plot_loadcase_panel(
         scale_units="xy",
         scale=1,
         color="#111111",
-        width=0.003,
+        width=QUIVER_WIDTH,
         zorder=4,
     )
 
-    cy, cz, r = _fibre_circle(problem)
-    ax.add_patch(
-        Circle(
-            (cy, cz), r, fill=False, edgecolor="#000000", linewidth=1.0, linestyle=":"
-        )
-    )
+    _draw_fibre_outline(ax, problem, edgecolor="#000000")
     ax.set_aspect("equal")
     _set_plot_limits(ax, problem)
     voigt_idx = int(np.argmax(np.abs(result.macro_strain)))
@@ -317,7 +395,7 @@ def plot_loadcase_deformations(
 
     out = Path(out_path)
     out.parent.mkdir(parents=True, exist_ok=True)
-    fig.savefig(out, dpi=160)
+    fig.savefig(out, dpi=SAVE_DPI)
     plt.close(fig)
     return out
 
@@ -356,7 +434,7 @@ def plot_fibre_displacement(loadcases: LoadcaseSet, out_path: str | Path) -> Pat
 
     out = Path(out_path)
     out.parent.mkdir(parents=True, exist_ok=True)
-    fig.savefig(out, dpi=160)
+    fig.savefig(out, dpi=SAVE_DPI)
     plt.close(fig)
     return out
 
@@ -381,8 +459,8 @@ def plot_von_mises(loadcases: LoadcaseSet, out_path: str | Path) -> Path:
             polys,
             array=vm,
             cmap="magma",
-            edgecolors="#333333",
-            linewidths=0.3,
+            edgecolors=MESH_EDGE_COLOR,
+            linewidths=MESH_EDGE_LW,
         )
         ax.add_collection(coll)
         ax.set_aspect("equal")
@@ -398,7 +476,7 @@ def plot_von_mises(loadcases: LoadcaseSet, out_path: str | Path) -> Path:
 
     out = Path(out_path)
     out.parent.mkdir(parents=True, exist_ok=True)
-    fig.savefig(out, dpi=160)
+    fig.savefig(out, dpi=SAVE_DPI)
     plt.close(fig)
     return out
 
@@ -434,7 +512,7 @@ def plot_engineering_constants(loadcases: LoadcaseSet, out_path: str | Path) -> 
 
     out = Path(out_path)
     out.parent.mkdir(parents=True, exist_ok=True)
-    fig.savefig(out, dpi=160)
+    fig.savefig(out, dpi=SAVE_DPI)
     plt.close(fig)
     return out
 
