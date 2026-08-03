@@ -67,6 +67,11 @@ A `Makefile` wraps the common workflows (`make help` lists targets); it defaults
 
 ### Plots (`pip install -e ".[viz]"`)
 
+```sh
+make plot-hex-amr   # hex + AMR bundle (includes dual-panel amr_refinement)
+make plot-hex
+```
+
 | Figure | Content |
 |---|---|
 | `rve_overview.png` | Undeformed mesh, fibre disc |
@@ -74,6 +79,35 @@ A `Makefile` wraps the common workflows (`make help` lists targets); it defaults
 | `fibre_displacement.png` | 2×3 fibre-direction `u_x` |
 | `von_mises.png` | 2×3 element von Mises stress |
 | `engineering_constants.png` | Homogenized E, G, ν bar chart |
+| `amr_refinement.png` | Dual panel: cell-size grid refine + stiffness-jump marker |
+
+#### Hex AMR showcase
+
+Hexagonal unit cell with stiffness-jump AMR around the fibre interface
+(`examples/ud_transverse_hex_amr.yaml`, `make plot-hex-amr`):
+
+<p align="center">
+  <img src="docs/images/hex_amr_rve_overview.jpg" width="360" alt="Hex AMR RVE overview mesh"/>
+</p>
+
+<p align="center">
+  <img src="docs/images/hex_amr_refinement.jpg" width="720" alt="Dual-panel AMR: cell size and stiffness-jump marker"/>
+</p>
+
+*Left: relative cell size (grid refinement). Right: stiffness-jump marker with
+threshold.*
+
+<p align="center">
+  <img src="docs/images/hex_amr_loadcases.jpg" width="720" alt="Six unit-strain deformation patterns"/>
+</p>
+
+*Six unit macro-strains — exaggerated in-plane fluctuation + quiver.*
+
+<p align="center">
+  <img src="docs/images/hex_amr_von_mises.jpg" width="720" alt="Element von Mises stress per loadcase"/>
+</p>
+
+*Element von Mises stress (MPa) for each loadcase.*
 
 ### Surrogate chain
 
@@ -93,6 +127,27 @@ corrects magnitude where hex FEA differs from Chamis.
 - `b3-micromech register-fea-micromech` registers either the trained surrogate or an
   on-the-fly FEA fallback (two-tier memory + disk LUT cache) as a `b3_tex` micromodel.
 - Agent skill (train → register → yarn LUT): package root **`SKILL.md`**.
+
+#### Surrogate response surfaces
+
+3-axis hex sweep (Vf × E_m × E_Lf) → MLP → structured response grids
+(`make demo-surrogate-3d`):
+
+<p align="center">
+  <img src="docs/images/surrogate_response_e1.jpg" width="420" alt="E1 response surface"/>
+  <img src="docs/images/surrogate_response_e2.jpg" width="420" alt="E2 response surface"/>
+</p>
+
+*Left: $E_1$ surface. Right: $E_2$ surface over the design hypercube.*
+
+Holdout diagnostics from the standard hypercube demo (`make demo-surrogate`):
+
+<p align="center">
+  <img src="docs/images/surrogate_e2_vs_vf.jpg" width="420" alt="E2 vs fibre volume fraction"/>
+  <img src="docs/images/surrogate_holdout_e2.jpg" width="360" alt="Holdout E2 parity"/>
+</p>
+
+*$E_2$ vs Vf trend and holdout parity.*
 
 ## Layout
 
