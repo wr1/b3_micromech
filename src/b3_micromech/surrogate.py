@@ -9,8 +9,6 @@ from typing import Any, Callable
 import numpy as np
 from numpy.typing import NDArray
 
-from b3_micromech.tensors import engineering_constants_transverse_iso
-
 # Upper-triangle Voigt indices (row, col) for symmetric 6×6 stiffness.
 _STIFFNESS_UPPER_TRIANGLE: tuple[tuple[int, int], ...] = tuple(
     (i, j) for i in range(6) for j in range(i, 6)
@@ -225,15 +223,10 @@ def engineering_constants_batch(
     stiffness: NDArray[np.float64],
 ) -> dict[str, NDArray[np.float64]]:
     """Extract transverse-isotropic engineering constants for each stiffness tensor."""
-    c = np.asarray(stiffness, dtype=float)
-    n = c.shape[0]
-    keys = ("e_l", "e_t", "g_lt", "nu_lt")
-    out = {k: np.empty(n, dtype=float) for k in keys}
-    for i in range(n):
-        ec = engineering_constants_transverse_iso(c[i])
-        for k in keys:
-            out[k][i] = ec[k]
-    return out
+    from b3_micromech.tensors import engineering_constants_transverse_iso_batch
+
+    batch = engineering_constants_transverse_iso_batch(stiffness)
+    return {k: batch[k] for k in ("e_l", "e_t", "g_lt", "nu_lt")}
 
 
 @dataclass
@@ -335,6 +328,7 @@ class StiffnessSurrogate:
         out.parent.mkdir(parents=True, exist_ok=True)
         joblib.dump(
             {
+                "kind": "mlp",
                 "feature_scaler": self.feature_scaler,
                 "target_scaler": self.target_scaler,
                 "regressor": self.regressor,
@@ -369,10 +363,16 @@ class StiffnessSurrogate:
     def as_predict_callable(
         self,
     ) -> Callable[[NDArray[np.float64]], NDArray[np.float64]]:
-        """Return ``predict(features) -> (6, 6)`` for ``b3_tex.micromodels.SurrogateModel``."""
+        """Callable for ``b3_tex.micromodels.SurrogateModel`` (batch-aware).
+
+        Accepts a single feature row → ``(6, 6)`` or a batch ``(N, F)`` →
+        ``(N, 6, 6)`` so ``SurrogateModel.stiffness_batch`` stays vectorized.
+        """
 
         def predict(features: NDArray[np.float64]) -> NDArray[np.float64]:
-            return self.predict_single(features)
+            x = np.asarray(features, dtype=float)
+            out = self.predict(x)
+            return out[0] if x.ndim == 1 else out
 
         return predict
 

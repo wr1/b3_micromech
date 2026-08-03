@@ -13,8 +13,6 @@ from b3_micromech.tensors import engineering_constants_transverse_iso
 
 class _StiffnessMaterial(Protocol):
     stiffness: NDArray[np.float64]
-    thermal_conductivity: NDArray[np.float64]
-    thermal_expansion: NDArray[np.float64]
 
 
 def constituent_engineering_constants(
@@ -36,19 +34,28 @@ def constituent_engineering_constants(
 
 
 def constituent_thermal_properties(
-    matrix: _StiffnessMaterial,
-    fibre: _StiffnessMaterial,
+    matrix: object,
+    fibre: object,
 ) -> tuple[float, float, float, float]:
     """Return ``(alpha_m, alpha_Lf, alpha_Tf, k_m)``.
 
     *alpha_m* – matrix CTE (transverse, index 1 of ``[α,α,α,0,0,0]``).
     *alpha_Lf / alpha_Tf* – fibre longitudinal / transverse CTE.
     *k_m* – matrix isotropic thermal conductivity (``k[0,0]``).
+
+    Materials without thermal tensors (e.g. ``b3_tex.materials.Material``) yield
+    zeros so stiffness surrogates keep the original 8-feature mechanical width.
     """
-    a_m = float(matrix.thermal_expansion[1])  # alpha_yy
-    a_Lf = float(fibre.thermal_expansion[0])   # alpha_xx (fibre axis)
-    a_Tf = float(fibre.thermal_expansion[1])   # alpha_yy (transverse)
-    k_m = float(matrix.thermal_conductivity[0, 0])
+    te_m = getattr(matrix, "thermal_expansion", None)
+    te_f = getattr(fibre, "thermal_expansion", None)
+    k_m_tensor = getattr(matrix, "thermal_conductivity", None)
+    if te_m is None or te_f is None or k_m_tensor is None:
+        return 0.0, 0.0, 0.0, 0.0
+    a_m = float(np.asarray(te_m, dtype=float).ravel()[1])  # alpha_yy
+    a_Lf = float(np.asarray(te_f, dtype=float).ravel()[0])  # alpha_xx (fibre)
+    a_Tf = float(np.asarray(te_f, dtype=float).ravel()[1])  # alpha_yy
+    k_arr = np.asarray(k_m_tensor, dtype=float)
+    k_m = float(k_arr[0, 0]) if k_arr.ndim == 2 else float(k_arr.ravel()[0])
     return a_m, a_Lf, a_Tf, k_m
 
 

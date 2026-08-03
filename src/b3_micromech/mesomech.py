@@ -24,16 +24,65 @@ from b3_micromech.lut_cache import (
     lut_cache_key,
     save_lut_cache,
 )
-from b3_micromech.surrogate import StiffnessSurrogate
+from b3_micromech.physics_surrogate import load_surrogate
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_RVE_YAML = Path("examples/sweep_hex_hypercube.yaml")
+# Repo root when installed editable (…/b3_micromech/src/b3_micromech/mesomech.py).
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+DEFAULT_RVE_YAML = _REPO_ROOT / "examples" / "sweep_hex_hypercube.yaml"
+# Stiffness surrogates (mlp / physics / mf_gp) train on 8 mechanical columns.
+N_MECH_FEATURES = 8
+
+
+def _resolve_rve_yaml(rve_yaml: str | Path) -> Path:
+    """Resolve an RVE YAML path (absolute, CWD-relative, or package-examples)."""
+    path = Path(rve_yaml)
+    if path.is_file():
+        return path
+    cwd_candidate = Path.cwd() / path
+    if cwd_candidate.is_file():
+        return cwd_candidate
+    pkg_candidate = _REPO_ROOT / path
+    if pkg_candidate.is_file():
+        return pkg_candidate
+    # Fall back to the default hex sweep template next to the package.
+    if DEFAULT_RVE_YAML.is_file() and path.name == DEFAULT_RVE_YAML.name:
+        return DEFAULT_RVE_YAML
+    return path
 
 
 def _load_rve_base(rve_yaml: str | Path) -> dict[str, Any]:
-    with open(rve_yaml, encoding="utf-8") as f:
+    path = _resolve_rve_yaml(rve_yaml)
+    with open(path, encoding="utf-8") as f:
         return yaml.safe_load(f)
+
+
+def _mechanical_features_for_model(
+    vf: NDArray[np.float64],
+    matrix: Any,
+    fibre: Any,
+    model: Any,
+) -> NDArray[np.float64]:
+    """Build feature rows clipped to the surrogate's trained feature width.
+
+    Always feeds the first 8 mechanical columns to stiffness surrogates so
+    optional thermal columns from ``build_feature_matrix`` never break
+    ``mlp`` / ``physics`` / ``mf_gp`` predictors. Width is taken from
+    ``model.feature_bounds`` when present.
+    """
+    features = build_feature_matrix(vf, matrix=matrix, fibre=fibre)
+    n_feat = N_MECH_FEATURES
+    bounds = getattr(model, "feature_bounds", None)
+    if bounds is not None:
+        n_feat = int(np.asarray(bounds).shape[0])
+    if features.shape[1] > n_feat:
+        features = features[:, :n_feat]
+    elif features.shape[1] < n_feat:
+        raise ValueError(
+            f"feature matrix has {features.shape[1]} columns but model expects {n_feat}"
+        )
+    return features
 
 
 def _sweep_point_from_materials(vf: float, matrix: Any, fibre: Any) -> dict[str, float]:
@@ -98,7 +147,7 @@ class FeaMicromechMicromodel:
 
     name: str
     rve_base: dict[str, Any]
-    model: StiffnessSurrogate | None = None
+    model: Any | None = None
     n_jobs: int = 1
     cache_dir: Path | None = None
     disk_cache: bool = True
@@ -153,11 +202,19 @@ class FeaMicromechMicromodel:
                     return stiffness
 
         if self.model is not None:
-            features = build_feature_matrix(vf_arr, matrix=matrix, fibre=fibre)
+            features = _mechanical_features_for_model(
+                vf_arr, matrix, fibre, self.model
+            )
             warn_if_out_of_bounds(
                 features, self.model.feature_bounds, context="stiffness_batch"
             )
-            stiffness = self.model.predict(features)
+            stiffness = np.asarray(self.model.predict(features), dtype=float)
+            if stiffness.ndim != 3 or stiffness.shape != (vf_arr.shape[0], 6, 6):
+                raise ValueError(
+                    f"surrogate predict must return (N, 6, 6) with N={vf_arr.shape[0]}, "
+                    f"got {stiffness.shape}"
+                )
+            stiffness = 0.5 * (stiffness + np.transpose(stiffness, (0, 2, 1)))
         else:
             logger.info(
                 "FEA homogenization batch: N=%d solves (n_jobs=%d)",
@@ -202,13 +259,13 @@ def fea_micromech_model(
 ) -> FeaMicromechMicromodel:
     """Build a micromodel using a surrogate and/or FEA fallback."""
     rve_base = _load_rve_base(rve_yaml)
-    model: StiffnessSurrogate | None = None
+    model: Any | None = None
     resolved_path: Path | None = None
 
     if surrogate_path is not None:
         resolved_path = Path(surrogate_path)
         if resolved_path.is_file():
-            model = StiffnessSurrogate.load(resolved_path)
+            model = load_surrogate(resolved_path)
         else:
             warnings.warn(
                 f"surrogate not found at {surrogate_path}; using FEA on-the-fly",
@@ -287,8 +344,17 @@ def register_fea_surrogate(
     )
 
 
+def _as_stiffness_predictor(model: Any) -> Any:
+    """Accept a live model, path, or joblib of any surrogate kind."""
+    if isinstance(model, (str, Path)):
+        return load_surrogate(model)
+    if hasattr(model, "predict") and hasattr(model, "feature_bounds"):
+        return model
+    raise TypeError(f"expected stiffness surrogate or path, got {type(model)!r}")
+
+
 def predict_stiffness_batch(
-    model: StiffnessSurrogate | str | Path | FeaMicromechMicromodel,
+    model: Any,
     vf: NDArray[np.float64],
     matrix: Any,
     fibre: Any,
@@ -298,38 +364,35 @@ def predict_stiffness_batch(
     """Predict ``(N, 6, 6)`` stiffness for a 1-D Vf array at fixed constituents."""
     if isinstance(model, FeaMicromechMicromodel):
         return model.stiffness_batch(matrix=matrix, fibre=fibre, vf=vf)
-    surrogate = (
-        model
-        if isinstance(model, StiffnessSurrogate)
-        else StiffnessSurrogate.load(model)
-    )
+    surrogate = _as_stiffness_predictor(model)
     vf_arr = np.asarray(vf, dtype=float).ravel()
-    features = build_feature_matrix(vf_arr, matrix=matrix, fibre=fibre)
+    features = _mechanical_features_for_model(vf_arr, matrix, fibre, surrogate)
     if warn_oob:
         warn_if_out_of_bounds(
             features, surrogate.feature_bounds, context="predict_stiffness_batch"
         )
-    return surrogate.predict(features)
+    return np.asarray(surrogate.predict(features), dtype=float)
 
 
 def predict_from_features(
-    model: StiffnessSurrogate | str | Path,
+    model: Any,
     features: NDArray[np.float64],
     *,
     warn_oob: bool = True,
 ) -> NDArray[np.float64]:
-    """Predict stiffness from an ``(N, 8)`` feature matrix."""
-    surrogate = (
-        model
-        if isinstance(model, StiffnessSurrogate)
-        else StiffnessSurrogate.load(model)
-    )
+    """Predict stiffness from an ``(N, 8)`` (or model-width) feature matrix."""
+    surrogate = _as_stiffness_predictor(model)
     x = np.asarray(features, dtype=float)
+    if x.ndim == 1:
+        x = x[None, :]
+    n_feat = int(np.asarray(surrogate.feature_bounds).shape[0])
+    if x.shape[1] > n_feat:
+        x = x[:, :n_feat]
     if warn_oob:
         warn_if_out_of_bounds(
             x, surrogate.feature_bounds, context="predict_from_features"
         )
-    return surrogate.predict(x)
+    return np.asarray(surrogate.predict(x), dtype=float)
 
 
 def constituents_from_yaml(config_path: str | Path) -> tuple[Any, Any]:

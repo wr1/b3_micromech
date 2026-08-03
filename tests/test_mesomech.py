@@ -255,3 +255,100 @@ def test_register_fea_micromech_with_b3_tex(tmp_path):
     centers, table = yarn.build_lut(0.4, 0.8, n_bins=32)
     assert centers.shape == (32,)
     assert table.shape == (32, 6, 6)
+
+
+def test_build_feature_matrix_accepts_b3_tex_materials():
+    """b3_tex Material has no thermal tensors — still yields (N, 8) features."""
+    pytest.importorskip("b3_tex")
+    from b3_tex.materials import Material as TexMaterial
+
+    matrix = TexMaterial.isotropic("m", youngs_modulus=3e9, poisson_ratio=0.35)
+    fibre = TexMaterial.transverse_isotropic(
+        "f", e_l=230e9, e_t=15e9, g_lt=15e9, nu_lt=0.2, nu_tt=0.3
+    )
+    features = build_feature_matrix(np.array([0.4, 0.6]), matrix=matrix, fibre=fibre)
+    assert features.shape == (2, 8)
+    assert np.allclose(features[:, 0], [0.4, 0.6])
+    assert np.allclose(features[:, 1], 3e9)
+
+
+def _synthetic_fea_like_for_physics(n: int = 36, seed: int = 0):
+    from b3_micromech.reference import chamis_engineering_constants_from_features
+    from b3_micromech.tensors import transverse_isotropic_stiffness
+
+    rng = np.random.default_rng(seed)
+    features = rng.uniform(
+        low=[0.25, 2.8e9, 0.32, 220e9, 14e9, 12e9, 0.18, 5.5e9],
+        high=[0.85, 3.4e9, 0.38, 240e9, 16e9, 16e9, 0.22, 6.5e9],
+        size=(n, 8),
+    )
+    base = chamis_engineering_constants_from_features(features)
+    vf = features[:, 0]
+    contrast = np.log(features[:, 4] / features[:, 1])
+    r_et = 0.05 + 0.12 * vf + 0.03 * contrast
+    stiffness = np.empty((n, 6, 6), dtype=float)
+    for i in range(n):
+        stiffness[i] = transverse_isotropic_stiffness(
+            e_l=float(base["e_l"][i] * np.exp(0.01 * vf[i])),
+            e_t=float(base["e_t"][i] * np.exp(r_et[i])),
+            g_lt=float(base["g_lt"][i] * np.exp(0.04 + 0.1 * vf[i])),
+            nu_lt=float(base["nu_lt"][i]),
+            nu_tt=float(base["nu_tt"][i] + 0.02 * vf[i]),
+        )
+    return features, stiffness
+
+
+@pytest.mark.parametrize("kind", ["physics", "mf_gp"])
+def test_physics_kinds_register_and_lut_with_b3_tex(tmp_path, kind):
+    """New residual surrogates load via mesomech and drive b3_tex LUTs."""
+    pytest.importorskip("sklearn")
+    pytest.importorskip("b3_tex")
+    from b3_micromech.physics_surrogate import train_surrogate
+    from b3_tex.materials import Material as TexMaterial
+    from b3_tex.materials import MicromechanicalMaterial
+    from b3_tex.micromodels import SurrogateModel, get_micromodel, register_micromodel
+
+    features, stiffness = _synthetic_fea_like_for_physics(n=36, seed=7)
+    train_kw: dict = {}
+    if kind == "mf_gp":
+        train_kw = {"n_restarts": 0, "min_rows": 8}
+    model = train_surrogate(features, stiffness, kind=kind, **train_kw)
+    path = tmp_path / f"{kind}.joblib"
+    model.save(path)
+
+    name = f"fea_{kind}_tex"
+    micromodel = register_fea_micromech(
+        path, name=name, disk_cache=False, cache_dir=tmp_path
+    )
+    assert get_micromodel(name) is micromodel
+    assert micromodel.mode == "surrogate"
+    assert getattr(micromodel.model, "kind", None) == kind
+
+    # b3_tex materials (no thermal tensors) must work through stiffness_batch.
+    matrix = TexMaterial.isotropic("m", youngs_modulus=3e9, poisson_ratio=0.35)
+    fibre = TexMaterial.transverse_isotropic(
+        "f", e_l=230e9, e_t=15e9, g_lt=15e9, nu_lt=0.2, nu_tt=0.3
+    )
+    yarn = MicromechanicalMaterial.from_constituents(
+        "yarn",
+        matrix=matrix,
+        fibre=fibre,
+        micromodel=micromodel,
+        nominal_vf=0.5,
+        max_vf=0.9,
+    )
+    centers, table = yarn.build_lut(0.4, 0.8, n_bins=64)
+    assert centers.shape == (64,)
+    assert table.shape == (64, 6, 6)
+    assert np.isfinite(table).all()
+    # Axial modulus rises with Vf for residual models trained near Chamis.
+    assert np.all(np.diff(table[:, 0, 0]) > 0)
+
+    # SurrogateModel + batch-aware as_predict_callable stays tensorized.
+    sm = SurrogateModel(predict=model.as_predict_callable(), name=f"sm_{kind}")
+    register_micromodel(sm)
+    batch = sm.stiffness_batch(matrix=matrix, fibre=fibre, vf=centers)
+    assert batch.shape == (64, 6, 6)
+    # Same path as mesomech for fixed constituents should agree within tol.
+    via_mm = micromodel.stiffness_batch(matrix=matrix, fibre=fibre, vf=centers)
+    np.testing.assert_allclose(batch, via_mm, rtol=1e-10, atol=1.0)

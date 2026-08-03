@@ -47,6 +47,9 @@ b3-micromech plot examples/ud_transverse.yaml --out results/plots
 # parameter-hypercube sweep → dataset, then train / use a surrogate
 b3-micromech sweep             examples/sweep_hex_hypercube.yaml --out results --jobs 4
 b3-micromech train-surrogate   results/dataset.npz --out results/surrogate_model.joblib
+# physics residual (Chamis + ridge) or multi-fidelity GP residual:
+b3-micromech train-surrogate   results/dataset.npz -o results/physics.joblib --kind physics
+b3-micromech train-surrogate   results/dataset.npz -o results/mf_gp.joblib --kind mf_gp
 b3-micromech predict-surrogate results/surrogate_model.joblib
 ```
 
@@ -74,21 +77,30 @@ A `Makefile` wraps the common workflows (`make help` lists targets); it defaults
 
 ### Surrogate chain
 
-Train an MLP stiffness surrogate (log-modulus features, `E₂`-weighted samples) and feed
-it into `b3_tex`:
+Train a stiffness surrogate and feed it into `b3_tex`:
+
+| kind | Model |
+|------|--------|
+| `mlp` (default) | Multi-output MLP on log-modulus features, $E_2$/Vf-weighted |
+| `physics` | Chamis closed form × ridge residual on engineering constants |
+| `mf_gp` | Chamis × GP residual (same multi-fidelity idea as b3_invsec) |
+
+Physics kinds keep sign-correct Vf/modulus trends with less data; the residual only
+corrects magnitude where hex FEA differs from Chamis.
 
 - `examples/sweep_hex_hypercube.yaml` (Vf × E_m × E_Tf) → `make demo-surrogate`
 - `examples/sweep_hex_3d_response.yaml` (Vf × E_m × E_Lf) → `make demo-surrogate-3d`
 - `b3-micromech register-fea-micromech` registers either the trained surrogate or an
   on-the-fly FEA fallback (two-tier memory + disk LUT cache) as a `b3_tex` micromodel.
+- Agent skill (train → register → yarn LUT): package root **`SKILL.md`**.
 
 ## Layout
 
 - `src/b3_micromech/backends/` — the only place that imports `mfem`.
 - `src/b3_micromech/quadrature.py` — implicit per-Gauss-point stiffness (`local_cloud`
   default; IDW blend for elements crossing the fibre boundary).
-- `src/b3_micromech/amr.py` — adaptive refinement; `src/b3_micromech/surrogate.py` and
-  `surrogate_response.py` — surrogate training and response surfaces.
+- `src/b3_micromech/amr.py` — adaptive refinement; `surrogate.py` (MLP),
+  `physics_surrogate.py` (Chamis residual / mf_gp), `surrogate_response.py`.
 
 ## Development
 

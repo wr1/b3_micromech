@@ -86,6 +86,51 @@ def transverse_isotropic_stiffness(
     )
 
 
+def transverse_isotropic_stiffness_batch(
+    *,
+    e_l: ArrayLike,
+    e_t: ArrayLike,
+    g_lt: ArrayLike,
+    nu_lt: ArrayLike,
+    nu_tt: ArrayLike,
+) -> NDArray[np.float64]:
+    """Vectorized TI stiffness: engineering constants → ``(N, 6, 6)``.
+
+    Same Voigt conventions as :func:`transverse_isotropic_stiffness`. The 3×3
+    normal block is inverted with a single batched ``np.linalg.inv`` (no Python
+    sample loop), so large Vf LUTs stay cheap. Mirrors
+    ``b3_tex.tensors.transverse_isotropic_stiffness_batch``.
+    """
+    el = np.asarray(e_l, dtype=float).ravel()
+    et = np.asarray(e_t, dtype=float).ravel()
+    glt = np.asarray(g_lt, dtype=float).ravel()
+    nult = np.asarray(nu_lt, dtype=float).ravel()
+    nutt = np.asarray(nu_tt, dtype=float).ravel()
+    n = el.shape[0]
+    if not (et.shape == glt.shape == nult.shape == nutt.shape == (n,)):
+        raise ValueError("all engineering-constant arrays must have the same length")
+    if n == 0:
+        return np.zeros((0, 6, 6), dtype=float)
+
+    gtt = et / (2.0 * (1.0 + nutt))
+    # Compliance 3×3 (matches orthotropic_stiffness for TI fibre-along-1).
+    s3 = np.zeros((n, 3, 3), dtype=float)
+    inv_el = 1.0 / el
+    inv_et = 1.0 / et
+    s3[:, 0, 0] = inv_el
+    s3[:, 0, 1] = s3[:, 0, 2] = s3[:, 1, 0] = s3[:, 2, 0] = -nult * inv_el
+    s3[:, 1, 1] = s3[:, 2, 2] = inv_et
+    s3[:, 1, 2] = s3[:, 2, 1] = -nutt * inv_et
+    c3 = np.linalg.inv(s3)
+
+    out = np.zeros((n, 6, 6), dtype=float)
+    out[:, :3, :3] = c3
+    out[:, 3, 3] = gtt
+    out[:, 4, 4] = glt
+    out[:, 5, 5] = glt
+    return out
+
+
 def voigt_b_matrix_plane_strain_x(
     dshape: ArrayLike, *, ordering: str = "byNODES"
 ) -> NDArray[np.float64]:
@@ -127,11 +172,42 @@ def engineering_constants_transverse_iso(
     stiffness: NDArray[np.float64],
 ) -> dict[str, float]:
     C = np.asarray(stiffness, dtype=float)
+    if C.shape != (6, 6):
+        raise ValueError(f"stiffness must have shape (6, 6), got {C.shape}")
     n = C[0, 0]
     k = 0.5 * (C[1, 1] + C[1, 2])
     m = 0.5 * (C[1, 1] - C[1, 2])
     l = C[0, 1]
     p = C[5, 5]
+    e_l = n - l * l / k
+    nu_lt = l / (2.0 * k)
+    g_lt = p
+    e_t = 1.0 / (1.0 / (4.0 * k) + 1.0 / (4.0 * m) + nu_lt * nu_lt / e_l)
+    nu_tt = (e_t / (2.0 * m)) - 1.0
+    return {
+        "e_l": e_l,
+        "e_t": e_t,
+        "g_lt": g_lt,
+        "nu_lt": nu_lt,
+        "nu_tt": nu_tt,
+        "g_tt": m,
+    }
+
+
+def engineering_constants_transverse_iso_batch(
+    stiffness: NDArray[np.float64],
+) -> dict[str, NDArray[np.float64]]:
+    """Vectorized TI engineering constants from ``(N, 6, 6)`` stiffness."""
+    c = np.asarray(stiffness, dtype=float)
+    if c.ndim == 2:
+        c = c[None, ...]
+    if c.ndim != 3 or c.shape[1:] != (6, 6):
+        raise ValueError(f"stiffness must have shape (N, 6, 6), got {c.shape}")
+    n = c[:, 0, 0]
+    k = 0.5 * (c[:, 1, 1] + c[:, 1, 2])
+    m = 0.5 * (c[:, 1, 1] - c[:, 1, 2])
+    l = c[:, 0, 1]
+    p = c[:, 5, 5]
     e_l = n - l * l / k
     nu_lt = l / (2.0 * k)
     g_lt = p

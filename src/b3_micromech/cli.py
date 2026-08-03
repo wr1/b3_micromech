@@ -9,7 +9,7 @@ from b3_micromech.homogenize import homogenize, surrogate_features
 from b3_micromech.plot import render_all_figures
 from b3_micromech.postprocess import solve_all_loadcases
 from b3_micromech.problem import RVEProblem
-from b3_micromech.reference import mori_tanaka_cylinder
+from b3_micromech.reference import chamis_ud_stiffness, mori_tanaka_cylinder
 from b3_micromech.features import build_feature_matrix, features_out_of_bounds
 from b3_micromech.mesomech import (
     constituents_from_yaml,
@@ -17,12 +17,15 @@ from b3_micromech.mesomech import (
     register_fea_micromech,
     register_fea_surrogate,
 )
+from b3_micromech.physics_surrogate import (
+    chamis_vs_fea_report,
+    load_surrogate,
+    train_surrogate_from_dataset,
+)
 from b3_micromech.surrogate import (
-    StiffnessSurrogate,
     evaluate_training_holdout,
     predict_random_hypercube_samples,
     save_hypercube_predictions,
-    train_stiffness_surrogate_from_dataset,
 )
 from b3_micromech.sweep import sweep_to_file
 from b3_micromech.tensors import engineering_constants_transverse_iso
@@ -44,19 +47,29 @@ def _reference_cmd(config: str) -> None:
     problem = RVEProblem.from_yaml(config)
     matrix = problem.materials[problem.matrix_material]
     fibre = problem.materials[problem.fibre_material]
-    Cmt = mori_tanaka_cylinder(
-        matrix=matrix,
-        fibre=fibre,
-        fibre_volume_fraction=problem.fibre_volume_fraction,
-    )
-    ec = engineering_constants_transverse_iso(Cmt)
-    print(f"fibre volume fraction = {problem.fibre_volume_fraction:.4f}")
-    print("Mori-Tanaka engineering constants (axis 1 = fibre):")
-    for k, v in ec.items():
-        if k.startswith("e_") or k.startswith("g_"):
-            print(f"  {k} = {v / 1e9:.4f} GPa")
-        else:
-            print(f"  {k} = {v:.4f}")
+    vf = problem.fibre_volume_fraction
+    print(f"fibre volume fraction = {vf:.4f}")
+    for label, C in (
+        (
+            "Mori-Tanaka",
+            mori_tanaka_cylinder(
+                matrix=matrix, fibre=fibre, fibre_volume_fraction=vf
+            ),
+        ),
+        (
+            "Chamis",
+            chamis_ud_stiffness(
+                matrix=matrix, fibre=fibre, fibre_volume_fraction=vf
+            ),
+        ),
+    ):
+        ec = engineering_constants_transverse_iso(C)
+        print(f"{label} engineering constants (axis 1 = fibre):")
+        for k, v in ec.items():
+            if k.startswith("e_") or k.startswith("g_"):
+                print(f"  {k} = {v / 1e9:.4f} GPa")
+            else:
+                print(f"  {k} = {v:.4f}")
 
 
 def _solve_cmd(config: str, out: str, plot: bool, plot_scale: float) -> None:
@@ -99,22 +112,33 @@ def _sweep_cmd(config: str, out: str, jobs: int) -> None:
     print(f"wrote {out_path}")
 
 
-def _train_surrogate_cmd(dataset: str, out: str, seed: int) -> None:
+def _train_surrogate_cmd(dataset: str, out: str, seed: int, kind: str) -> None:
     model_path = Path(out)
-    model = train_stiffness_surrogate_from_dataset(
-        dataset, model_path=model_path, random_state=seed
+    kind_norm = kind.strip().lower()
+    train_kwargs: dict = {}
+    if kind_norm == "mlp":
+        train_kwargs["random_state"] = seed
+    elif kind_norm == "mf_gp":
+        train_kwargs["n_restarts"] = 1
+    model = train_surrogate_from_dataset(
+        dataset, model_path=model_path, kind=kind_norm, **train_kwargs
     )
     from b3_micromech.export import load_dataset
 
     features, stiffness, _meta = load_dataset(dataset)
+    base_report = chamis_vs_fea_report(features, stiffness)
     report = evaluate_training_holdout(model, features, stiffness)
-    print(f"trained surrogate -> {model_path}")
+    print(f"trained surrogate kind={kind_norm!r} -> {model_path}")
+    print("  bare Chamis (pre-residual) vs FEA:")
+    for key, value in sorted(base_report.items()):
+        print(f"    {key} = {value:.4e}")
+    print("  trained holdout:")
     for key, value in sorted(report.items()):
-        print(f"  {key} = {value:.4e}")
+        print(f"    {key} = {value:.4e}")
 
 
 def _predict_surrogate_cmd(model: str, out: str, n_samples: int, seed: int) -> None:
-    surrogate = StiffnessSurrogate.load(model)
+    surrogate = load_surrogate(model)
     features, stiffness = predict_random_hypercube_samples(
         surrogate, n_samples, seed=seed
     )
@@ -143,7 +167,7 @@ def _predict_batch_cmd(
     vf_npy: str,
     vf_linspace: str,
 ) -> None:
-    surrogate = StiffnessSurrogate.load(model)
+    surrogate = load_surrogate(model)
     vf_arr = _parse_vf_list(vf, vf_npy, vf_linspace)
     matrix, fibre = constituents_from_yaml(constituents)
     stiffness = predict_stiffness_batch(surrogate, vf_arr, matrix, fibre)
@@ -278,7 +302,10 @@ _app = cli(
         ),
         command(
             name="train-surrogate",
-            help="Train an MLP stiffness surrogate from a sweep dataset.",
+            help=(
+                "Train a stiffness surrogate from a sweep dataset "
+                "(kind: mlp | physics | mf_gp)."
+            ),
             callback=_train_surrogate_cmd,
             arguments=[
                 argument(
@@ -291,6 +318,15 @@ _app = cli(
                     arg_type=str,
                     default="results/surrogate_model.joblib",
                     help="Output path for the trained model.",
+                ),
+                option(
+                    flags=["--kind"],
+                    arg_type=str,
+                    default="mlp",
+                    help=(
+                        "Surrogate kind: mlp (black-box), physics (Chamis+ridge residual), "
+                        "mf_gp (Chamis+GP residual)."
+                    ),
                 ),
                 option(
                     flags=["--seed"],
