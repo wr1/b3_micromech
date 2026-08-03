@@ -52,15 +52,11 @@ def _reference_cmd(config: str) -> None:
     for label, C in (
         (
             "Mori-Tanaka",
-            mori_tanaka_cylinder(
-                matrix=matrix, fibre=fibre, fibre_volume_fraction=vf
-            ),
+            mori_tanaka_cylinder(matrix=matrix, fibre=fibre, fibre_volume_fraction=vf),
         ),
         (
             "Chamis",
-            chamis_ud_stiffness(
-                matrix=matrix, fibre=fibre, fibre_volume_fraction=vf
-            ),
+            chamis_ud_stiffness(matrix=matrix, fibre=fibre, fibre_volume_fraction=vf),
         ),
     ):
         ec = engineering_constants_transverse_iso(C)

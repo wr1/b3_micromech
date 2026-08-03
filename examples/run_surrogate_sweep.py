@@ -25,11 +25,9 @@ from __future__ import annotations
 
 import argparse
 import json
-import math
-import os
 import subprocess
 import sys
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -44,6 +42,7 @@ DESIGN_SPACE_PATH = SCRIPT_DIR / "design_space.yaml"
 # ---------------------------------------------------------------------------
 # Design-space reader
 # ---------------------------------------------------------------------------
+
 
 @dataclass(frozen=True)
 class FibreSpec:
@@ -136,41 +135,55 @@ def _load_design_space(path: str | Path) -> DesignSpace:
 # Sweep config builder
 # ---------------------------------------------------------------------------
 
-def _material_block(fb: FibreSpec | None, mt: MatrixSpec | None,
-                    e_l: float | None, e_t: float | None,
-                    g_lt: float | None, nu_lt: float | None,
-                    nu_tt: float | None) -> list[dict[str, Any]]:
+
+def _material_block(
+    fb: FibreSpec | None,
+    mt: MatrixSpec | None,
+    e_l: float | None,
+    e_t: float | None,
+    g_lt: float | None,
+    nu_lt: float | None,
+    nu_tt: float | None,
+) -> list[dict[str, Any]]:
     """Build the ``materials`` list for a sweep YAML."""
     materials: list[dict[str, Any]] = []
 
     if fb:
-        materials.append({
-            "name": "fibre",
-            "type": "transverse_isotropic",
-            "e_l": fb.e_l if e_l is None else e_l,
-            "e_t": fb.e_t if e_t is None else e_t,
-            "g_lt": fb.g_lt if g_lt is None else g_lt,
-            "nu_lt": fb.nu_lt if nu_lt is None else nu_lt,
-            "nu_tt": fb.nu_tt if nu_tt is None else nu_tt,
-        })
+        materials.append(
+            {
+                "name": "fibre",
+                "type": "transverse_isotropic",
+                "e_l": fb.e_l if e_l is None else e_l,
+                "e_t": fb.e_t if e_t is None else e_t,
+                "g_lt": fb.g_lt if g_lt is None else g_lt,
+                "nu_lt": fb.nu_lt if nu_lt is None else nu_lt,
+                "nu_tt": fb.nu_tt if nu_tt is None else nu_tt,
+            }
+        )
 
     if mt:
-        materials.append({
-            "name": "matrix",
-            "type": "isotropic",
-            "youngs_modulus": mt.youngs_modulus,
-            "poisson_ratio": mt.poisson_ratio,
-        })
+        materials.append(
+            {
+                "name": "matrix",
+                "type": "isotropic",
+                "youngs_modulus": mt.youngs_modulus,
+                "poisson_ratio": mt.poisson_ratio,
+            }
+        )
 
     # When both constituents are fixed we want fibre=0, matrix=1 ordering
     # but the sweep code looks up by name so order doesn't matter.
     return materials
 
 
-def _make_sweep_config(fibre: FibreSpec, matrix: MatrixSpec,
-                       vf: float, resolution: int = 24,
-                       domain_size: float = 1.0,
-                       shape: str = "square") -> dict[str, Any]:
+def _make_sweep_config(
+    fibre: FibreSpec,
+    matrix: MatrixSpec,
+    vf: float,
+    resolution: int = 24,
+    domain_size: float = 1.0,
+    shape: str = "square",
+) -> dict[str, Any]:
     """Build a single RVE sweep config that can be passed to
     ``b3_micromech.sweep.run_sweep()``."""
     cfg = {
@@ -218,6 +231,7 @@ def write_sweep_yaml(cfg: dict[str, Any], path: str | Path) -> None:
 # Sample generator -- presets
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class Sample:
     fibre_name: str
@@ -236,37 +250,43 @@ def _samples_for_preset(preset: str, ds: DesignSpace) -> list[Sample]:
         representative_vf = 0.50
         for fb in ds.fibres:
             for mt in ds.matrices:
-                samples.append(Sample(
-                    fibre_name=fb.name,
-                    matrix_name=mt.name,
-                    vf=representative_vf,
-                    domain_shape="square",
-                    resolution=ds.mesh_resolution[0],
-                ))
+                samples.append(
+                    Sample(
+                        fibre_name=fb.name,
+                        matrix_name=mt.name,
+                        vf=representative_vf,
+                        domain_shape="square",
+                        resolution=ds.mesh_resolution[0],
+                    )
+                )
     elif preset == "constituent_focus":
         # First fibre x first matrix at 3 Vf points for a curve.
         fb = ds.fibres[0]
         mt = ds.matrices[0]
         vfs = [0.30, 0.50, 0.70]
         for vf in vfs:
-            samples.append(Sample(
-                fibre_name=fb.name,
-                matrix_name=mt.name,
-                vf=vf,
-                domain_shape="square",
-                resolution=ds.mesh_resolution[0],
-            ))
+            samples.append(
+                Sample(
+                    fibre_name=fb.name,
+                    matrix_name=mt.name,
+                    vf=vf,
+                    domain_shape="square",
+                    resolution=ds.mesh_resolution[0],
+                )
+            )
     elif preset == "weave_sensitivity":
         # One fibre x matrix at hex shape to simulate weave-like domains.
         fb = ds.fibres[0]
         mt = ds.matrices[0]
-        samples.append(Sample(
-            fibre_name=fb.name,
-            matrix_name=mt.name,
-            vf=0.50,
-            domain_shape="hexagon",
-            resolution=ds.mesh_resolution[0],
-        ))
+        samples.append(
+            Sample(
+                fibre_name=fb.name,
+                matrix_name=mt.name,
+                vf=0.50,
+                domain_shape="hexagon",
+                resolution=ds.mesh_resolution[0],
+            )
+        )
     else:
         raise ValueError(f"unknown preset {preset!r}")
 
@@ -277,20 +297,27 @@ def _samples_for_preset(preset: str, ds: DesignSpace) -> list[Sample]:
 # Main runner
 # ---------------------------------------------------------------------------
 
+
 def _git_sha() -> str:
     """Return the current git short SHA (or 'unknown')."""
     try:
         out = subprocess.run(
             ["git", "rev-parse", "--short", "HEAD"],
-            capture_output=True, text=True, timeout=5,
+            capture_output=True,
+            text=True,
+            timeout=5,
         )
         return out.stdout.strip() if out.returncode == 0 else "unknown"
     except Exception:
         return "unknown"
 
 
-def _run(samples: list[Sample], out_dir: Path, design_path: Path,
-         resolution_override: int | None = None) -> Path:
+def _run(
+    samples: list[Sample],
+    out_dir: Path,
+    design_path: Path,
+    resolution_override: int | None = None,
+) -> Path:
     """Run end-to-end homogenisation for all samples. Returns the NPZ path."""
     from b3_micromech.sweep import run_sweep
 
@@ -299,7 +326,11 @@ def _run(samples: list[Sample], out_dir: Path, design_path: Path,
     all_stiffness: list[np.ndarray] = []
 
     for i, sample in enumerate(samples):
-        ds_res = resolution_override if resolution_override is not None else sample.resolution
+        ds_res = (
+            resolution_override
+            if resolution_override is not None
+            else sample.resolution
+        )
 
         # Build config with explicit values
         cfg = _make_sweep_config_with_values(
@@ -316,45 +347,50 @@ def _run(samples: list[Sample], out_dir: Path, design_path: Path,
         write_sweep_yaml(cfg, tmp_yaml)
 
         # Run sweep
-        print(f"[{i+1}/{len(samples)}] solving {sample.fibre_name}/{sample.matrix_name} "
-              f"vf={sample.vf:.2f} ({sample.domain_shape}, {ds_res}x{ds_res}) ...",
-              flush=True)
+        print(
+            f"[{i + 1}/{len(samples)}] solving {sample.fibre_name}/{sample.matrix_name} "
+            f"vf={sample.vf:.2f} ({sample.domain_shape}, {ds_res}x{ds_res}) ...",
+            flush=True,
+        )
 
         try:
             X, C, records = run_sweep(str(tmp_yaml), n_jobs=1)
-            assert X.shape[0] == C.shape[0] == 1, \
-                f"expected 1 solve, got {X.shape[0]}"
+            assert X.shape[0] == C.shape[0] == 1, f"expected 1 solve, got {X.shape[0]}"
 
             C0 = C[0]  # shape (6, 6)
             all_features.append(X[0])
             all_stiffness.append(C0)
-            results.append({
-                "index": i,
-                "fibre": sample.fibre_name,
-                "matrix": sample.matrix_name,
-                "vf": sample.vf,
-                "domain_shape": sample.domain_shape,
-                "resolution": ds_res,
-                "C_eff": C0.tolist(),
-                "feature": X[0].tolist(),
-                "metadata": records[0] if records else {},
-            })
+            results.append(
+                {
+                    "index": i,
+                    "fibre": sample.fibre_name,
+                    "matrix": sample.matrix_name,
+                    "vf": sample.vf,
+                    "domain_shape": sample.domain_shape,
+                    "resolution": ds_res,
+                    "C_eff": C0.tolist(),
+                    "feature": X[0].tolist(),
+                    "metadata": records[0] if records else {},
+                }
+            )
             print(
-                "  -> C_eff[0,0] = %0.4f GPa" % (C0[0,0] / 1e9),
+                "  -> C_eff[0,0] = %0.4f GPa" % (C0[0, 0] / 1e9),
                 flush=True,
             )
 
         except Exception as exc:
             print(f"  -> FAILED: {exc}", flush=True)
-            results.append({
-                "index": i,
-                "fibre": sample.fibre_name,
-                "matrix": sample.matrix_name,
-                "vf": sample.vf,
-                "domain_shape": sample.domain_shape,
-                "resolution": ds_res,
-                "error": str(exc),
-            })
+            results.append(
+                {
+                    "index": i,
+                    "fibre": sample.fibre_name,
+                    "matrix": sample.matrix_name,
+                    "vf": sample.vf,
+                    "domain_shape": sample.domain_shape,
+                    "resolution": ds_res,
+                    "error": str(exc),
+                }
+            )
 
         # Clean up temp
         tmp_yaml.unlink(missing_ok=True)
@@ -372,36 +408,51 @@ def _run(samples: list[Sample], out_dir: Path, design_path: Path,
         npz_path,
         X=X_out,
         C=C_out,
-        feature_names=np.array(["vf", "E_m", "nu_m", "E_Lf", "E_Tf",
-                                 "G_LTf", "nu_LTf", "G_TTf"]),
+        feature_names=np.array(
+            ["vf", "E_m", "nu_m", "E_Lf", "E_Tf", "G_LTf", "nu_LTf", "G_TTf"]
+        ),
     )
     meta_path = out_dir / "sweep_results.meta.json"
-    meta_path.write_text(json.dumps({
-        "design_space": str(design_path),
-        "design_space_version": "1",
-        "git_sha": _git_sha(),
-        "timestamp": datetime.now(timezone.utc).isoformat(),
-        "n_samples": len(samples),
-        "n_solved": len(results) - sum(1 for r in results if "error" in r),
-        "n_failed": sum(1 for r in results if "error" in r),
-        "samples": [
-            {"fibre": s.fibre_name, "matrix": s.matrix_name,
-             "vf": s.vf, "domain_shape": s.domain_shape,
-             "resolution": s.resolution}
-            for s in samples
-        ],
-        "results": results,
-    }, indent=2), encoding="utf-8")
+    meta_path.write_text(
+        json.dumps(
+            {
+                "design_space": str(design_path),
+                "design_space_version": "1",
+                "git_sha": _git_sha(),
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "n_samples": len(samples),
+                "n_solved": len(results) - sum(1 for r in results if "error" in r),
+                "n_failed": sum(1 for r in results if "error" in r),
+                "samples": [
+                    {
+                        "fibre": s.fibre_name,
+                        "matrix": s.matrix_name,
+                        "vf": s.vf,
+                        "domain_shape": s.domain_shape,
+                        "resolution": s.resolution,
+                    }
+                    for s in samples
+                ],
+                "results": results,
+            },
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
 
     print(f"\nWrote {npz_path}")
     print(f"Meta: {meta_path}")
     return npz_path
 
 
-def _make_sweep_config_with_values(fibre_name: str, matrix_name: str,
-                                   vf: float, resolution: int,
-                                   domain_size: float,
-                                   shape: str) -> dict[str, Any]:
+def _make_sweep_config_with_values(
+    fibre_name: str,
+    matrix_name: str,
+    vf: float,
+    resolution: int,
+    domain_size: float,
+    shape: str,
+) -> dict[str, Any]:
     """Build sweep config with explicit constituent values (no lookup)."""
     materials = [
         {
@@ -486,8 +537,10 @@ def main() -> None:
 
     # Load design space
     ds = _load_design_space(args.design_space)
-    print(f"Loaded design space: {len(ds.fibres)} fibres, "
-          f"{len(ds.matrices)} matrices, {len(ds.weaves)} weaves")
+    print(
+        f"Loaded design space: {len(ds.fibres)} fibres, "
+        f"{len(ds.matrices)} matrices, {len(ds.weaves)} weaves"
+    )
 
     # Generate samples
     samples = _samples_for_preset(args.preset, ds)
@@ -502,13 +555,14 @@ def main() -> None:
     out_dir.mkdir(parents=True, exist_ok=True)
 
     # Run
-    npz_path = _run(samples, out_dir, Path(args.design_space),
-                    resolution_override=args.resolution)
+    npz_path = _run(
+        samples, out_dir, Path(args.design_space), resolution_override=args.resolution
+    )
 
     # Verify output
     if npz_path.exists():
         data = np.load(npz_path)
-        print(f"\nVerification:")
+        print("\nVerification:")
         print(f"  X shape: {data['X'].shape}")
         print(f"  C shape: {data['C'].shape}")
         meta = json.loads(
@@ -516,7 +570,7 @@ def main() -> None:
         )
         print(f"  solved: {meta['n_solved']}/{meta['n_samples']}")
         print(f"  git sha: {meta['git_sha']}")
-        print(f"\nDone.")
+        print("\nDone.")
     else:
         print("ERROR: no output produced.", file=sys.stderr)
         sys.exit(1)

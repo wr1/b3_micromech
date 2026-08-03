@@ -8,7 +8,6 @@ import pytest
 from b3_micromech.features import (
     _build_mech_features_matrix,
     build_feature_matrix,
-    constituent_engineering_constants,
     constituent_thermal_properties,
 )
 from b3_micromech.homogenize import (
@@ -198,9 +197,9 @@ class TestFeatures:
         assert np.allclose(feat[:, :8], mech)
         # last 4 = thermal
         assert feat[0, 8] == pytest.approx(40.0e-6)  # alpha_m
-        assert feat[0, 9] == pytest.approx(0.5e-6)   # alpha_Lf
+        assert feat[0, 9] == pytest.approx(0.5e-6)  # alpha_Lf
         assert feat[0, 10] == pytest.approx(12.0e-6)  # alpha_Tf
-        assert feat[0, 11] == pytest.approx(0.25)     # k_m
+        assert feat[0, 11] == pytest.approx(0.25)  # k_m
 
     def test_build_mech_features_matrix_unchanged(self):
         vf = np.array([0.5], dtype=float)
@@ -352,9 +351,10 @@ def test_volume_average_formula():
 
     # Voigt rule: alpha_h = vf * alpha_f + (1-vf) * alpha_m
     vf = problem.fibre_volume_fraction
-    expected = vf * problem.materials["fibre"].thermal_expansion + (
-        1.0 - vf
-    ) * problem.materials["matrix"].thermal_expansion
+    expected = (
+        vf * problem.materials["fibre"].thermal_expansion
+        + (1.0 - vf) * problem.materials["matrix"].thermal_expansion
+    )
     assert np.allclose(alpha_hom, expected)
 
 
@@ -473,7 +473,7 @@ def test_series_bound_transverse_conductivity():
     The series bound is a conservative lower bound for the transverse effective
     conductivity.  Our FEA result should be within 10 % of this bound.
     """
-    k_f = 2.0   # transverse fibre conductivity
+    k_f = 2.0  # transverse fibre conductivity
     k_m = 0.25
     vf = 0.5
     series_k = 1.0 / (vf / k_f + (1.0 - vf) / k_m)  # ≈ 0.4545
@@ -647,8 +647,7 @@ def test_conductivity_converges_with_mesh():
         problem = RVEProblem.from_config(cfg)
         result = homogenize(problem)
         avg_trans = 0.5 * (
-            result.effective_conductivity[1, 1]
-            + result.effective_conductivity[2, 2]
+            result.effective_conductivity[1, 1] + result.effective_conductivity[2, 2]
         )
         err = abs(avg_trans - target_k) / target_k
         if res == 8:
@@ -724,7 +723,7 @@ def test_diffusion_result_shape():
 _MATRIX_CFG = {
     "name": "matrix",
     "type": "isotropic",
-    "youngs_modulus": 3e9,       # 3 GPa epoxy
+    "youngs_modulus": 3e9,  # 3 GPa epoxy
     "poisson_ratio": 0.35,
     "thermal_conductivity": 0.25,
     "thermal_expansion": 40.0e-6,
@@ -733,9 +732,9 @@ _MATRIX_CFG = {
 _FIBRE_CFG = {
     "name": "fibre",
     "type": "transverse_isotropic",
-    "e_l": 230e9,     # 230 GPa
-    "e_t": 15e9,      # 15 GPa
-    "g_lt": 15e9,     # 15 GPa
+    "e_l": 230e9,  # 230 GPa
+    "e_t": 15e9,  # 15 GPa
+    "g_lt": 15e9,  # 15 GPa
     "nu_lt": 0.20,
     "nu_tt": 0.30,
     "k_l": 10.0,
@@ -789,13 +788,13 @@ def _analytical_transverse_cte_stress_partition(problem):
     S_f = np.linalg.inv(ff.stiffness)
 
     sigma_x = (
-        (S_f[1, 0] - S_m[1, 0]) * (ff.thermal_expansion[0] - fm.thermal_expansion[0])
+        (S_f[1, 0] - S_m[1, 0])
+        * (ff.thermal_expansion[0] - fm.thermal_expansion[0])
         / (S_f[0, 0] * vf + S_m[0, 0] * vm)
     )
 
-    alpha_yy = (
-        vm * (fm.thermal_expansion[1] + S_m[1, 0] * sigma_x)
-        + vf * (ff.thermal_expansion[1] + S_f[1, 0] * sigma_x)
+    alpha_yy = vm * (fm.thermal_expansion[1] + S_m[1, 0] * sigma_x) + vf * (
+        ff.thermal_expansion[1] + S_f[1, 0] * sigma_x
     )
 
     return alpha_yy
@@ -849,8 +848,8 @@ def test_transverse_cte_within_bounds():
     ff = problem.materials["fibre"]
     fm = problem.materials["matrix"]
 
-    alpha_f1 = ff.thermal_expansion[1]   # α_Tf
-    alpha_m1 = fm.thermal_expansion[1]   # α_m
+    alpha_f1 = ff.thermal_expansion[1]  # α_Tf
+    alpha_m1 = fm.thermal_expansion[1]  # α_m
 
     # Voigt upper bound (rule of mixtures)
     alpha_V = vf * alpha_f1 + (1.0 - vf) * alpha_m1
@@ -1010,11 +1009,14 @@ def test_transverse_cte_vf_monotonic():
     alphas = []
 
     for test_vf in vf_values:
-        cfg = {**base_cfg, "rve": {
-            "matrix_material": "matrix",
-            "fibre_material": "fibre",
-            "fibre_volume_fraction": test_vf,
-        }}
+        cfg = {
+            **base_cfg,
+            "rve": {
+                "matrix_material": "matrix",
+                "fibre_material": "fibre",
+                "fibre_volume_fraction": test_vf,
+            },
+        }
         problem = RVEProblem.from_config(cfg)
         result = homogenize(problem)
 
@@ -1027,5 +1029,5 @@ def test_transverse_cte_vf_monotonic():
         assert alphas[i] > alphas[i + 1], (
             f"alpha_yy should decrease with vf: "
             f"{alphas[i]:.3e} (vf={vf_values[i]}) > "
-            f"{alphas[i+1]:.3e} (vf={vf_values[i+1]})"
+            f"{alphas[i + 1]:.3e} (vf={vf_values[i + 1]})"
         )

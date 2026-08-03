@@ -88,9 +88,7 @@ def build_feature_matrix(
         em, num, elf, etf, gltf, nultf, gttf = constituent_engineering_constants(
             matrix, fibre
         )
-        a_m, a_Lf, a_Tf, k_m_val = constituent_thermal_properties(
-            matrix, fibre
-        )
+        a_m, a_Lf, a_Tf, k_m_val = constituent_thermal_properties(matrix, fibre)
         _thermal = bool(abs(a_m) + abs(a_Lf) + abs(a_Tf) + abs(k_m_val) > 0.0)
     else:
         scalars = (E_m, nu_m, E_Lf, E_Tf, G_LTf, nu_LTf, G_TTf)
@@ -99,7 +97,12 @@ def build_feature_matrix(
                 "provide matrix and fibre, or all seven constituent scalars"
             )
         em, num, elf, etf, gltf, nultf, gttf = (float(v) for v in scalars)  # type: ignore[misc]
-        if (alpha_m is None) != (alpha_Lf is None) != (alpha_Tf is None) != (k_m is None):
+        if (
+            (alpha_m is None)
+            != (alpha_Lf is None)
+            != (alpha_Tf is None)
+            != (k_m is None)
+        ):
             raise ValueError(
                 "provide all four thermal scalars (alpha_m, alpha_Lf, alpha_Tf, k_m) or None"
             )
@@ -169,9 +172,7 @@ def features_out_of_bounds(
         x = x[None, :]
     b = np.asarray(bounds, dtype=float)
     if b.ndim != 2 or b.shape[1] != 2 or b.shape[0] != x.shape[1]:
-        raise ValueError(
-            f"bounds must have shape ({x.shape[1]}, 2), got {b.shape}"
-        )
+        raise ValueError(f"bounds must have shape ({x.shape[1]}, 2), got {b.shape}")
     below = x < b[:, 0]
     above = x > b[:, 1]
     return np.any(below | above, axis=1)

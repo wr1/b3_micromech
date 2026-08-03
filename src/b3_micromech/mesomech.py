@@ -89,9 +89,7 @@ def _sweep_point_from_materials(vf: float, matrix: Any, fibre: Any) -> dict[str,
     em, num, elf, etf, gltf, nultf, gttf = constituent_engineering_constants(
         matrix, fibre
     )
-    a_m, a_Lf, a_Tf, k_m_val = constituent_thermal_properties(
-        matrix, fibre
-    )
+    a_m, a_Lf, a_Tf, k_m_val = constituent_thermal_properties(matrix, fibre)
     return {
         "vf": float(vf),
         "E_m": em,
@@ -202,9 +200,7 @@ class FeaMicromechMicromodel:
                     return stiffness
 
         if self.model is not None:
-            features = _mechanical_features_for_model(
-                vf_arr, matrix, fibre, self.model
-            )
+            features = _mechanical_features_for_model(vf_arr, matrix, fibre, self.model)
             warn_if_out_of_bounds(
                 features, self.model.feature_bounds, context="stiffness_batch"
             )

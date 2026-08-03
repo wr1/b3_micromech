@@ -209,7 +209,9 @@ class PhysicsResidualSurrogate:
             coef_matrix=_stack_coefs(coefs),
         )
 
-    def _predict_ec(self, features: NDArray[np.float64]) -> dict[str, NDArray[np.float64]]:
+    def _predict_ec(
+        self, features: NDArray[np.float64]
+    ) -> dict[str, NDArray[np.float64]]:
         x = np.asarray(features, dtype=float)
         if x.ndim == 1:
             x = x[None, :]
@@ -316,11 +318,9 @@ class MultiFidelityGPSurrogate:
 
         def _make_gp(n_features: int) -> Any:
             ls0 = np.ones(n_features)
-            kernel = (
-                ConstantKernel(1.0, constant_value_bounds=(1e-3, 1e2))
-                * RBF(length_scale=ls0, length_scale_bounds=(1e-2, 1e2))
-                + WhiteKernel(noise_level=1e-3, noise_level_bounds=(1e-6, 1e0))
-            )
+            kernel = ConstantKernel(1.0, constant_value_bounds=(1e-3, 1e2)) * RBF(
+                length_scale=ls0, length_scale_bounds=(1e-2, 1e2)
+            ) + WhiteKernel(noise_level=1e-3, noise_level_bounds=(1e-6, 1e0))
             return GaussianProcessRegressor(
                 kernel=kernel,
                 normalize_y=True,
@@ -396,7 +396,9 @@ class MultiFidelityGPSurrogate:
                 residual[:, j] = r
         return residual
 
-    def _predict_ec(self, features: NDArray[np.float64]) -> dict[str, NDArray[np.float64]]:
+    def _predict_ec(
+        self, features: NDArray[np.float64]
+    ) -> dict[str, NDArray[np.float64]]:
         x = np.asarray(features, dtype=float)
         if x.ndim == 1:
             x = x[None, :]

@@ -52,9 +52,7 @@ class Material:
             )
         a = np.asarray(self.thermal_expansion, dtype=float)
         if a.shape != (6,):
-            raise ValueError(
-                f"thermal_expansion must have shape (6,), got {a.shape}"
-            )
+            raise ValueError(f"thermal_expansion must have shape (6,), got {a.shape}")
         object.__setattr__(self, "stiffness", c)
         object.__setattr__(self, "thermal_conductivity", k)
         object.__setattr__(self, "thermal_expansion", a)

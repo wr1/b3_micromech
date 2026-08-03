@@ -45,7 +45,9 @@ def _engineering_constants_isotropic(
     return float(e), float(nu)
 
 
-def _chamis_transverse(matrix_modulus: float, fibre_modulus: float, sqrt_vf: float) -> float:
+def _chamis_transverse(
+    matrix_modulus: float, fibre_modulus: float, sqrt_vf: float
+) -> float:
     if fibre_modulus <= 0.0:
         raise ValueError("fibre modulus must be positive")
     return matrix_modulus / (1.0 - sqrt_vf * (1.0 - matrix_modulus / fibre_modulus))

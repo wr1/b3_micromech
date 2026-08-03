@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any
 
 import numpy as np
 from numpy.typing import NDArray
@@ -146,9 +145,7 @@ def _make_bilinear_integrator(c_per_gp: NDArray[np.float64], data: _ElementGPDat
     return _Integrator()
 
 
-def _make_thermal_integrator(
-    alpha_per_gp: NDArray[np.float64], data: _ElementGPData
-):
+def _make_thermal_integrator(alpha_per_gp: NDArray[np.float64], data: _ElementGPData):
     """Bilinear integrator for thermal eigenstrain RHS (delta_T = 1).
 
     Returns a ``PyLinearFormIntegrator`` that assembles the thermal
@@ -177,9 +174,7 @@ def _make_thermal_integrator(
     return _ThermalRHS()
 
 
-def _collect_alpha_at_gps(
-    mesh, fespace, problem: RVEProblem
-) -> NDArray[np.float64]:
+def _collect_alpha_at_gps(mesh, fespace, problem: RVEProblem) -> NDArray[np.float64]:
     """Per-GP thermal-expansion vector (N_gps, 6) from the RVEProblem."""
     n_elem = mesh.GetNE()
     import mfem.ser as mfem
@@ -193,9 +188,6 @@ def _collect_alpha_at_gps(
     # Same cell-ID mapping as _collect_element_gp_data uses.
     gp_cell_ids = np.repeat(np.arange(n_elem, dtype=np.intp), nq)
     gp_coords_yz = np.empty((total, 2), dtype=float)
-    dshape_ref = mfem.DenseMatrix(nd, 2)
-    J_inv = mfem.DenseMatrix(2, 2)
-    dshape_phys = mfem.DenseMatrix(nd, 2)
 
     for e in range(n_elem):
         T = mesh.GetElementTransformation(e)
@@ -231,8 +223,12 @@ def _collect_alpha_at_gps(
     alpha_per_gp = np.empty((total, 6), dtype=float)
     for idx in range(total):
         # Compare the stiffness at this GP to the two constituent stiffnesses.
-        diff_m = np.abs(c_all[idx] - problem.materials[problem.matrix_material].stiffness).max()
-        diff_f = np.abs(c_all[idx] - problem.materials[problem.fibre_material].stiffness).max()
+        diff_m = np.abs(
+            c_all[idx] - problem.materials[problem.matrix_material].stiffness
+        ).max()
+        diff_f = np.abs(
+            c_all[idx] - problem.materials[problem.fibre_material].stiffness
+        ).max()
         if diff_f < diff_m:
             alpha_per_gp[idx] = fibre
         else:
@@ -457,7 +453,9 @@ def solve_periodic_plane_strain(
 
 
 def solve_thermal_loadcase(
-    problem: RVEProblem, *, delta_t: float = 1.0,
+    problem: RVEProblem,
+    *,
+    delta_t: float = 1.0,
     c_eff: NDArray[np.float64] | None = None,
 ) -> tuple[NDArray[np.float64], dict]:
     """One-temperature-rise solve → effective thermal-expansion vector.
@@ -569,7 +567,9 @@ def solve_thermal_loadcase(
     # <sigma> = -C_eff : alpha_eff * dT.
     eps_mech = eps_fluct - alpha_per_gp * delta_t
     sigma_per_gp = np.einsum("nij,nj->ni", data.c_per_gp, eps_mech)
-    vol_avg_sigma = (data.gp_weights[:, None] * sigma_per_gp).sum(axis=0) / data.gp_weights.sum()
+    vol_avg_sigma = (data.gp_weights[:, None] * sigma_per_gp).sum(
+        axis=0
+    ) / data.gp_weights.sum()
 
     if c_eff is None:
         c_eff, _ = solve_periodic_plane_strain(problem)
@@ -594,9 +594,7 @@ def solve_thermal_loadcase(
 # ---------------------------------------------------------------------------
 
 
-def _collect_k_at_gps(
-    mesh, fespace, problem: RVEProblem
-) -> NDArray[np.float64]:
+def _collect_k_at_gps(mesh, fespace, problem: RVEProblem) -> NDArray[np.float64]:
     """Per-GP conductivity tensor (N_gps, 6, 6) from the RVEProblem.
 
     Reuses the same element/grid topology as _collect_element_gp_data
@@ -648,7 +646,6 @@ def _make_diffusion_integrator(k_per_gp: NDArray[np.float64], data: _ElementGPDa
             e = T.ElementNo
             elmat.SetSize(nd)
             local = np.zeros((nd, nd), dtype=float)
-            ir = mfem.IntRules.Get(fe.GetGeomType(), 2 * fe.GetOrder())
             for q in range(nq):
                 # gp_dshapes are stored ALREADY in physical coords (see
                 # _precompute: Mult(dshape_ref, J_inv, dshape_phys)).
@@ -764,11 +761,23 @@ def effective_conductivity_tensor(
 
     # ---- Step 2: build diffusion stiffness matrix ----
     a = mfem.BilinearForm(fespace)
-    a.AddDomainIntegrator(_make_diffusion_integrator(k_per_gp, type("DummyGPData", (), {
-        "nq": nq, "nd": nd, "n_elem": n_elem,
-        "gp_dshapes": gp_dshapes, "gp_weights": gp_weights,
-        "elem_vdofs": elem_vdofs,
-    })()))
+    a.AddDomainIntegrator(
+        _make_diffusion_integrator(
+            k_per_gp,
+            type(
+                "DummyGPData",
+                (),
+                {
+                    "nq": nq,
+                    "nd": nd,
+                    "n_elem": n_elem,
+                    "gp_dshapes": gp_dshapes,
+                    "gp_weights": gp_weights,
+                    "elem_vdofs": elem_vdofs,
+                },
+            )(),
+        )
+    )
     a.Assemble()
     a.Finalize()
 
@@ -780,14 +789,17 @@ def effective_conductivity_tensor(
     K_T = (P_NC.T @ K_L @ P_NC).tocsr()
 
     # ---- Step 3: periodic constraints ----
-    n_scalar_L = fespace.GetNDofs()
     master_of = periodic_vertex_master_map(
-        mesh, shape=problem.domain_shape,
-        domain_size=problem.domain_size, tol=problem.periodic_tolerance,
+        mesh,
+        shape=problem.domain_shape,
+        domain_size=problem.domain_size,
+        tol=problem.periodic_tolerance,
     )
     pin_vertex = origin_vertex_index(
-        mesh, shape=problem.domain_shape,
-        domain_size=problem.domain_size, tol=problem.periodic_tolerance,
+        mesh,
+        shape=problem.domain_shape,
+        domain_size=problem.domain_size,
+        tol=problem.periodic_tolerance,
     )
     nv = mesh.GetNV()
 

@@ -51,10 +51,20 @@ SCHEMA = {
         "type": list,
         "required": True,
         "item_keys": {
-            "name": {"type": str, "required": True, "valid": [
-                "plain", "twill", "satin", "basket",
-                "3d_orthogonal", "layer_to_layer", "ncf", "braid",
-            ]},
+            "name": {
+                "type": str,
+                "required": True,
+                "valid": [
+                    "plain",
+                    "twill",
+                    "satin",
+                    "basket",
+                    "3d_orthogonal",
+                    "layer_to_layer",
+                    "ncf",
+                    "braid",
+                ],
+            },
             "code": {"type": int, "required": True, "valid_range": (0, 7)},
             "description": {"type": str, "required": False},
             "parameter_bounds": {"type": dict, "required": True, "has_keys": True},
@@ -87,6 +97,7 @@ SCHEMA = {
 # Validation helpers
 # ---------------------------------------------------------------------------
 
+
 class ValidationError(Exception):
     pass
 
@@ -105,11 +116,15 @@ def validate_scalar(value, spec, path):
             except ValueError:
                 raise ValidationError(f"{path}: expected numeric value, got {value!r}")
         else:
-            raise ValidationError(f"{path}: expected numeric value, got {type(value).__name__}")
+            raise ValidationError(
+                f"{path}: expected numeric value, got {type(value).__name__}"
+            )
 
         if "valid" in spec:
             if numeric_val not in spec["valid"]:
-                raise ValidationError(f"{path}: value {value!r} not in allowed {spec['valid']}")
+                raise ValidationError(
+                    f"{path}: value {value!r} not in allowed {spec['valid']}"
+                )
 
         if "valid_range" in spec:
             lo, hi = spec["valid_range"]
@@ -123,18 +138,24 @@ def validate_scalar(value, spec, path):
             raise ValidationError(f"{path}: expected str, got {type(value).__name__}")
         if "valid" in spec:
             if value not in spec["valid"]:
-                raise ValidationError(f"{path}: value {value!r} not in allowed {spec['valid']}")
+                raise ValidationError(
+                    f"{path}: value {value!r} not in allowed {spec['valid']}"
+                )
 
 
 def validate_list(key, value, spec, path_prefix):
     """Validate a list field and recurse into each item."""
     if not isinstance(value, list):
-        raise ValidationError(f"{path_prefix}.{key}: expected list, got {type(value).__name__}")
+        raise ValidationError(
+            f"{path_prefix}.{key}: expected list, got {type(value).__name__}"
+        )
 
     for i, item in enumerate(value):
         item_prefix = f"{path_prefix}.{key}[{i}]"
         if not isinstance(item, dict):
-            raise ValidationError(f"{item_prefix}: expected dict, got {type(item).__name__}")
+            raise ValidationError(
+                f"{item_prefix}: expected dict, got {type(item).__name__}"
+            )
 
         item_spec = spec["item_keys"]
         # Required keys
@@ -170,7 +191,9 @@ def validate_design_space(data):
             continue
         spec = SCHEMA[key]
         if not isinstance(value, spec["type"]):
-            errors.append(f"{key}: expected {spec['type'].__name__}, got {type(value).__name__}")
+            errors.append(
+                f"{key}: expected {spec['type'].__name__}, got {type(value).__name__}"
+            )
             continue
 
         if spec["type"] is list:
@@ -185,6 +208,7 @@ def validate_design_space(data):
 # ---------------------------------------------------------------------------
 # Sweep size estimation
 # ---------------------------------------------------------------------------
+
 
 def estimate_sweep_size(data):
     """Estimate the number of FEA solves for each sweep preset.
@@ -223,6 +247,7 @@ def estimate_sweep_size(data):
         sweep_keys = [k for k in sweep if k != "mesh"]
         if sweep_keys:
             from math import prod
+
             solves_per_weave = prod(counts.get(k, 0) for k in sweep_keys)
         else:
             solves_per_weave = 0
@@ -261,6 +286,7 @@ def estimate_hex_vf_count(spec):
 # Main
 # ---------------------------------------------------------------------------
 
+
 def main():
     if len(sys.argv) < 2:
         print("Usage: validate_design_space.py <path>")
@@ -281,6 +307,7 @@ def main():
     mode = sys.argv[-1].lstrip("-") if len(sys.argv) > 2 else "validate"
 
     import os
+
     os.environ["PYTHONUNBUFFERED"] = "1"
 
     if mode in ("validate", "all"):
@@ -306,13 +333,11 @@ def main():
             print(f"    Weave architectures: {info['num_weave_architectures']}")
             print(f"    Key counts: {json.dumps(info['per_key_counts'], indent=4)}")
 
-            per_weave = info['sweep_grid_size'] * info['num_weave_architectures']
-            total = per_weave
             print(f"\n    FEA solves (micromech): {info['micromech_solves']}")
             print(f"    FEA solves (b3_tex):    {info['b3tex_solves']}")
-            if info['micromech_solves'] > 1000:
+            if info["micromech_solves"] > 1000:
                 print(f"    ⚠ WARNING: {info['micromech_solves']} solves is expensive!")
-            elif info['micromech_solves'] > 500:
+            elif info["micromech_solves"] > 500:
                 print(f"    ⚠ CAUTION: {info['micromech_solves']} solves may take time")
 
     return 0
