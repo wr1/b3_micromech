@@ -128,6 +128,10 @@ def hex_vf_sweep_values(
     - ``full``: anchor at ``vf_min``, mid-range coverage, dense packing-limit cluster.
     - ``compact``: same cluster with fewer mid-range samples (3-D response sweeps).
     - ``high``: packing-limit cluster only (refinement near the flat-edge limit).
+
+    Production surrogates should keep the packing cluster (``full`` or ``high``):
+    yarn LUTs query near the upper Vf edge, where FEA residuals grow fastest.
+    ``dense_start`` (default 0.74) and ``n_dense`` control that upper-edge budget.
     """
     cluster = packing_cluster or hex_vf_packing_cluster_values(
         standoff=standoff,

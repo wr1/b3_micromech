@@ -1,5 +1,9 @@
 # Hexagonal high-Vf surrogate sweep: dense packing-limit cluster × E_m × E_Tf.
-# Use for refinement near the flat-edge limit (Vf ≈ 0.74–0.89 at 1% standoff).
+#
+# Use to refine or re-train near the flat-edge limit (Vf ≈ 0.74–0.89 at 1% standoff).
+# Prefer this when the mid-range hypercube is already trained but high-Vf / high-E2
+# holdout is weak, or when the yarn LUT will query near packing. Merge with a mid-Vf
+# dataset (or use hex_vf_sweep: full) so the full Vf range is still covered.
 domain:
   shape: hexagon
   size: 1.0

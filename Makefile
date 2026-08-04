@@ -76,13 +76,13 @@ sweep-hex-hypercube: ## hex hypercube sweep (84 solves, mid-Vf + packing cluster
 sweep-hex-high-vf: ## high-Vf hex sweep (48 solves, packing-limit cluster only)
 	$(RUN) b3-micromech sweep $(SWEEP_HEX_HIGH_VF_YAML) --out $(SURROGATE_HIGH_VF_OUT)
 
-demo-surrogate: ## full chain: hex sweep → train MLP → 1000 preds → plots
+demo-surrogate: ## full chain: hex sweep → physics residual → 1000 preds → plots
 	$(RUN) python examples/demo_surrogate_chain.py --out $(SURROGATE_OUT) --jobs 1
 
 sweep-hex-3d-response: ## hex 3D-response sweep (Vf×E_m×E_Lf, 117 solves)
 	$(RUN) b3-micromech sweep $(SWEEP_HEX_3D_YAML) --out $(SURROGATE_3D_OUT)
 
-demo-surrogate-3d: ## 3D response surrogate: Vf×E_m×E_Lf → MLP → response surfaces
+demo-surrogate-3d: ## 3D response: Vf×E_m×E_Lf → physics residual → response surfaces
 	$(RUN) python examples/demo_surrogate_3d_response.py --out $(SURROGATE_3D_OUT) --jobs 1
 
 demo-mesomech-batch: ## vectorized FEA surrogate batch + b3_tex LUT registration

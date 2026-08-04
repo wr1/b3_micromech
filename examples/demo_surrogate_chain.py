@@ -1,17 +1,20 @@
 #!/usr/bin/env python3
-"""End-to-end surrogate demo: hex sweep → MLP train → 1000 predictions → validation.
+"""End-to-end surrogate demo: hex sweep → physics residual → 1000 preds → validation.
 
 Pipeline::
 
     sweep_hex_hypercube.yaml  →  dataset.npz
-    dataset.npz               →  surrogate_model.joblib
+    dataset.npz               →  surrogate_model.joblib  (kind=physics by default)
     surrogate_model.joblib    →  predictions.npz + diagnostic plots
 
 Validation:
 
     - In-sample hold-out error on the training grid
-    - Stratified error split at Vf ≥ 0.75
+    - Stratified error split at Vf ≥ 0.75 (upper-edge performance)
     - Three random FEA spot-checks inside the training hypercube
+
+The default sweep (``hex_vf_sweep: full``) includes a dense packing-limit Vf
+cluster — keep that when building production models; yarn LUTs query the edge.
 
 Plots (under ``<out>/plots/``):
 
@@ -25,6 +28,7 @@ Usage::
 
     python examples/demo_surrogate_chain.py
     python examples/demo_surrogate_chain.py --skip-sweep --out results/surrogate_demo
+    python examples/demo_surrogate_chain.py --kind mf_gp
 """
 
 from __future__ import annotations
@@ -43,8 +47,8 @@ if str(REPO / "src") not in sys.path:
 from b3_micromech.export import load_dataset, save_dataset
 from b3_micromech.geometry import max_fibre_volume_fraction
 from b3_micromech.homogenize import homogenize
+from b3_micromech.physics_surrogate import DEFAULT_SURROGATE_KIND, train_surrogate
 from b3_micromech.surrogate import (
-    StiffnessSurrogate,
     engineering_constants_batch,
     evaluate_training_holdout,
     predict_random_hypercube_samples,
@@ -85,17 +89,23 @@ def train_stiffness_surrogate(
     stiffness: np.ndarray,
     model_path: Path,
     *,
+    kind: str = DEFAULT_SURROGATE_KIND,
     seed: int = 0,
-) -> StiffnessSurrogate:
-    """Fit an MLP on the sweep dataset."""
-    model = StiffnessSurrogate.train(features, stiffness, random_state=seed)
+):
+    """Fit the default residual (or requested kind) on the sweep dataset."""
+    train_kw: dict = {}
+    if kind == "mlp":
+        train_kw["random_state"] = seed
+    elif kind == "mf_gp":
+        train_kw["n_restarts"] = 1
+    model = train_surrogate(features, stiffness, kind=kind, **train_kw)
     model.save(model_path)
-    print(f"trained surrogate -> {model_path}")
+    print(f"trained surrogate kind={kind!r} -> {model_path}")
     return model
 
 
 def predict_uniform_hypercube_batch(
-    model: StiffnessSurrogate,
+    model,
     n_samples: int,
     predictions_path: Path,
     *,
@@ -110,7 +120,7 @@ def predict_uniform_hypercube_batch(
 
 def run_fea_spot_checks(
     sweep_yaml: Path,
-    model: StiffnessSurrogate,
+    model,
     *,
     n_checks: int = 3,
     seed: int = 1,
@@ -164,7 +174,7 @@ def run_fea_spot_checks(
 def render_surrogate_diagnostic_plots(
     train_features: np.ndarray,
     train_stiffness: np.ndarray,
-    model: StiffnessSurrogate,
+    model,
     inference_features: np.ndarray,
     inference_stiffness: np.ndarray,
     plot_dir: Path,
@@ -239,9 +249,7 @@ def render_surrogate_diagnostic_plots(
     return paths
 
 
-def register_b3_tex_surrogate(
-    model: StiffnessSurrogate, name: str = "fea_hex_surrogate"
-) -> None:
+def register_b3_tex_surrogate(model, name: str = "fea_hex_surrogate") -> None:
     """Wrap the trained model for ``b3_tex.micromodels.SurrogateModel``."""
     try:
         from b3_tex.micromodels import SurrogateModel
@@ -266,6 +274,13 @@ def main() -> None:
     ap.add_argument("--n-spot-checks", type=int, default=3)
     ap.add_argument("--jobs", "-j", type=int, default=1)
     ap.add_argument("--seed", type=int, default=0)
+    ap.add_argument(
+        "--kind",
+        type=str,
+        default=DEFAULT_SURROGATE_KIND,
+        choices=("physics", "mf_gp", "mlp"),
+        help="Surrogate kind (default: physics residual)",
+    )
     ap.add_argument("--skip-sweep", action="store_true")
     ap.add_argument("--skip-spot-checks", action="store_true")
     ap.add_argument("--register-b3-tex", action="store_true")
@@ -290,7 +305,9 @@ def main() -> None:
             args.sweep_yaml, dataset_path, n_jobs=args.jobs
         )
 
-    model = train_stiffness_surrogate(features, stiffness, model_path, seed=args.seed)
+    model = train_stiffness_surrogate(
+        features, stiffness, model_path, kind=args.kind, seed=args.seed
+    )
     holdout = evaluate_training_holdout(model, features, stiffness)
     print("hold-out report:")
     for key, value in sorted(holdout.items()):

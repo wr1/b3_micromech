@@ -18,6 +18,7 @@ from b3_micromech.mesomech import (
     register_fea_surrogate,
 )
 from b3_micromech.physics_surrogate import (
+    DEFAULT_SURROGATE_KIND,
     chamis_vs_fea_report,
     load_surrogate,
     train_surrogate_from_dataset,
@@ -300,7 +301,7 @@ _app = cli(
             name="train-surrogate",
             help=(
                 "Train a stiffness surrogate from a sweep dataset "
-                "(kind: mlp | physics | mf_gp)."
+                "(default kind: physics residual; also mlp | mf_gp)."
             ),
             callback=_train_surrogate_cmd,
             arguments=[
@@ -318,10 +319,11 @@ _app = cli(
                 option(
                     flags=["--kind"],
                     arg_type=str,
-                    default="mlp",
+                    default=DEFAULT_SURROGATE_KIND,
                     help=(
-                        "Surrogate kind: mlp (black-box), physics (Chamis+ridge residual), "
-                        "mf_gp (Chamis+GP residual)."
+                        "Surrogate kind: physics (Chamis+ridge residual, default; "
+                        "best high-Vf extrapolation), mf_gp (Chamis+GP residual), "
+                        "mlp (black-box)."
                     ),
                 ),
                 option(

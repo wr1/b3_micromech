@@ -13,6 +13,11 @@ with √Vf). Only a small residual is fitted on FEA labels:
 
 Both expose the same surface as :class:`StiffnessSurrogate` for mesomech:
 ``predict``, ``feature_bounds``, ``save`` / ``load``, ``as_predict_callable``.
+
+**Training data:** always include FEA points on the upper Vf edge (hex packing
+cluster, ``hex_vf_sweep: full`` or ``high``). Yarn LUTs query near packing;
+mid-Vf-only grids under-sample the residual that residual kinds are meant to
+learn. See package ``SKILL.md`` / README surrogate sections.
 """
 
 from __future__ import annotations
@@ -42,6 +47,12 @@ _EPS = 1e-30
 N_RESIDUAL_BASIS = 9  # columns of residual_basis
 
 SurrogateKind = Literal["mlp", "physics", "mf_gp"]
+
+# Default for train-surrogate / demos. Chosen for high-Vf extrapolation on hex
+# FEA (train Vf<0.7 → test Vf≥0.7): physics residual beats mf_gp and MLP on
+# mean/max Frobenius and E₂ error while staying monotone by construction.
+# Use ``mf_gp`` when residual uncertainty / κ is needed; ``mlp`` only on dense grids.
+DEFAULT_SURROGATE_KIND: SurrogateKind = "physics"
 
 
 def residual_basis(features: NDArray[np.float64]) -> NDArray[np.float64]:
@@ -472,10 +483,13 @@ def train_surrogate(
     features: NDArray[np.float64],
     stiffness: NDArray[np.float64],
     *,
-    kind: SurrogateKind = "mlp",
+    kind: SurrogateKind = DEFAULT_SURROGATE_KIND,
     **train_kwargs: Any,
 ) -> Any:
-    """Train a stiffness surrogate of the requested kind."""
+    """Train a stiffness surrogate of the requested kind.
+
+    Default is :data:`DEFAULT_SURROGATE_KIND` (``physics`` residual).
+    """
     if kind == "mlp":
         from b3_micromech.surrogate import StiffnessSurrogate
 
@@ -488,7 +502,10 @@ def train_surrogate(
 
 
 def load_surrogate(path: str | Path) -> Any:
-    """Load any stiffness surrogate joblib (dispatches on ``kind``)."""
+    """Load any stiffness surrogate joblib (dispatches on ``kind``).
+
+    Legacy joblibs without a ``kind`` field are treated as ``mlp``.
+    """
     import joblib
 
     from b3_micromech.surrogate import StiffnessSurrogate
@@ -507,7 +524,7 @@ def train_surrogate_from_dataset(
     dataset_path: str | Path,
     *,
     model_path: str | Path,
-    kind: SurrogateKind = "mlp",
+    kind: SurrogateKind = DEFAULT_SURROGATE_KIND,
     **train_kwargs: Any,
 ) -> Any:
     from b3_micromech.export import load_dataset

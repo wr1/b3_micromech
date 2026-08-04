@@ -7,8 +7,15 @@ from pathlib import Path
 import numpy as np
 from numpy.typing import NDArray
 
+from typing import Any, Protocol
+
 from b3_micromech.export import SURROGATE_FEATURE_NAMES
-from b3_micromech.surrogate import StiffnessSurrogate, engineering_constants_batch
+from b3_micromech.surrogate import engineering_constants_batch
+
+
+class _PredictsStiffness(Protocol):
+    def predict(self, features: NDArray[np.float64]) -> NDArray[np.float64]: ...
+
 
 SURROGATE_FEATURE_INDEX: dict[str, int] = {
     name: i for i, name in enumerate(SURROGATE_FEATURE_NAMES)
@@ -68,7 +75,7 @@ def build_structured_response_grid(
 
 
 def predict_structured_response_grid(
-    model: StiffnessSurrogate,
+    model: _PredictsStiffness | Any,
     bounds: NDArray[np.float64],
     varying_axes: tuple[str, ...],
     grid_sizes: tuple[int, ...],

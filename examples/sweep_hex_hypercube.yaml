@@ -1,5 +1,10 @@
 # Hexagonal hypercube sweep for stiffness-surrogate training (84 FEA solves).
-# Vf: mid-range coverage + dense cluster at the hex flat-edge (wide-side) limit.
+#
+# Vf sampling (hex_vf_sweep: full):
+#   - mid-range anchors for baseline coverage
+#   - dense packing-limit cluster (~0.74 → standoff-limited max)
+# The upper-Vf edge is where yarn LUTs query hardest and residuals grow fastest —
+# do not drop the packing cluster when building production surrogates.
 domain:
   shape: hexagon
   size: 1.0

@@ -116,11 +116,19 @@ def test_mf_gp_save_load_roundtrip(tmp_path):
     assert np.allclose(model.predict(features), loaded.predict(features), rtol=1e-10)
 
 
+def test_default_surrogate_kind_is_physics():
+    from b3_micromech.physics_surrogate import DEFAULT_SURROGATE_KIND
+
+    assert DEFAULT_SURROGATE_KIND == "physics"
+
+
 def test_train_surrogate_kind_dispatch():
     pytest.importorskip("sklearn")
     from b3_micromech.physics_surrogate import train_surrogate
 
     features, stiffness = _synthetic_fea_like_dataset(n=24, seed=5)
+    default = train_surrogate(features, stiffness)
+    assert getattr(default, "kind", None) == "physics"
     phys = train_surrogate(features, stiffness, kind="physics")
     assert phys.kind == "physics"
     mlp = train_surrogate(

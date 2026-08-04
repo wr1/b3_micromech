@@ -39,9 +39,9 @@ constituents (E_m,ν_m, E_Lf,E_Tf,…) + Vf
                      or b3_tex micromodel: fea_hex
 ```
 
-**Prefer:** hex packing RVE + `physics`/`mf_gp` when data is scarce and trends must
-stay monotone; `mlp` when the FEA grid is dense. Chamis alone is the low-fidelity
-baseline, not the default FEA card.
+**Prefer:** hex packing RVE + **`physics` residual (default)** for production cards —
+best high-Vf extrapolation. Use `mf_gp` when residual uncertainty/κ is needed; `mlp`
+only on dense FEA grids. Bare Chamis is the low-fidelity base, not the FEA card.
 
 ## Conventions
 
@@ -61,14 +61,15 @@ pip install -e ".[viz,sweep,surrogate,test]"   # mfem core; same env as b3-tex f
 b3-micromech solve examples/ud_transverse_hex.yaml --out results/hex --plot
 b3-micromech solve examples/ud_transverse_hex_amr.yaml --out results/hex_amr
 b3-micromech sweep examples/sweep_hex_hypercube.yaml --out results/surrogate_demo --jobs 4
-b3-micromech train-surrogate results/surrogate_demo/dataset.npz -o results/physics.joblib --kind physics
+b3-micromech train-surrogate results/surrogate_demo/dataset.npz -o results/surrogate_model.joblib
+# default kind=physics; override with --kind mf_gp|mlp
 b3-micromech predict-batch results/physics.joblib --vf-linspace 0.55:0.88:10000 -o results/batch.npz
 ```
 
 | Make | |
 |------|--|
-| `demo-surrogate` | sweep → MLP → holdout |
-| `demo-surrogate-3d` | Vf×E_m×E_Lf surfaces |
+| `demo-surrogate` | sweep → physics residual → holdout |
+| `demo-surrogate-3d` | Vf×E_m×E_Lf surfaces (physics default) |
 | `demo-mesomech-batch` | register + batch Vf |
 | `plot-hex-amr` | thin-edge mesh + dual-panel grid refine |
 
@@ -140,8 +141,9 @@ solver:
 | Plot | `amr_refinement.png` — cell size + marker (thin edges) |
 | Cost | each iter remeshes; keep base modest (`[16]`) and let AMR work |
 
-**High-Vf sweeps:** use `hex_vf_sweep: high` (or `full` with packing cluster) and at least
-standard mesh / `local_cloud` res 6 — packing limit is where coarse meshes lie most.
+**High-Vf sweeps:** keep a packing cluster (`hex_vf_sweep: full` or `high`) for
+surrogate training — see [Training data — sample the upper Vf edge](#training-data--sample-the-upper-vf-edge).
+Mesh: standard res + `local_cloud` res 6 minimum; packing limit is where coarse meshes fail.
 
 ### Quick checks
 
@@ -153,12 +155,47 @@ standard mesh / `local_cloud` res 6 — packing limit is where coarse meshes lie
 
 | kind | Form | When |
 |------|------|------|
-| `mlp` | multi-out MLP, log-moduli, E₂/Vf weights | dense FEA |
-| `physics` | Chamis × exp(φ·c) ridge residual | scarce data, monotone |
-| `mf_gp` | Chamis × GP residual (±κ) | uncertainty / conservative |
+| **`physics` (default)** | Chamis × exp(φ·c) ridge residual | production default; best high-Vf extrap |
+| `mf_gp` | Chamis × GP residual (±κ) | uncertainty / conservative capacity |
+| `mlp` | multi-out MLP, log-moduli, E₂/Vf weights | dense FEA only |
 
 All: `load_surrogate` → `predict((N,8))→(N,6,6)` tensorized (batched TI assembly).
 `as_predict_callable()` is batch-aware for `b3_tex.SurrogateModel`.
+
+### Training data — sample the upper Vf edge
+
+Yarn LUTs and compaction push Vf toward the **hex packing limit**
+(~0.74–0.89 with 1% standoff; hard limit π/(2√3)≈0.907). Residuals and
+errors grow fastest there (thin matrix ligaments). **Do not train only on
+mid-Vf** and hope residual models extrapolate cleanly to the edge.
+
+| Rule | Practice |
+|------|----------|
+| Always include a dense packing cluster | Prefer `hex_vf_sweep: full` (mid + edge) or `high` (edge only for refinement) |
+| Put FEA budget at the edge | Cluster from `dense_start` ≈ 0.74 up to standoff-limited max (`n_dense` ≥ 6–8) |
+| Cover the Vf range you will query | `predict-batch` / `build_lut` max Vf must sit **inside** the training Vf envelope |
+| Mesh at high Vf | ≥ standard res + `local_cloud` res 6; AMR if publishing near packing |
+| Prefer residual kinds | `physics` default; still **needs** edge FEA labels — base alone is not enough |
+
+Ready-made sweeps:
+
+- `examples/sweep_hex_hypercube.yaml` — `hex_vf_sweep: full` (mid-range + packing cluster)
+- `examples/sweep_hex_high_vf.yaml` — packing cluster only (`make sweep-hex-high-vf`)
+
+Custom:
+
+```yaml
+sweep:
+  vf:
+    hex_vf_sweep:
+      preset: full          # or high
+      standoff: 0.01
+      dense_start: 0.74     # start of packing cluster
+      n_dense: 8            # points along the upper edge
+```
+
+MLP training already **upweights** high-Vf / high-$E_2$ rows; residual kinds
+still need those rows **present** in the dataset.
 
 ## FEA material card (API)
 

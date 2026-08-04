@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""3-D response surrogate demo: Vf × E_m × E_Lf sweep → MLP → response surfaces.
+"""3-D response surrogate demo: Vf × E_m × E_Lf sweep → physics residual → surfaces.
 
 Pipeline::
 
     sweep_hex_3d_response.yaml  →  dataset.npz
-    dataset.npz                 →  surrogate_model.joblib
+    dataset.npz                 →  surrogate_model.joblib  (kind=physics by default)
     surrogate_model.joblib      →  structured response grid + 3-D plots
 
 Plots (under ``<out>/plots/``):
@@ -37,8 +37,8 @@ if str(REPO / "src") not in sys.path:
 
 from b3_micromech.export import load_dataset, save_dataset
 from b3_micromech.geometry import max_fibre_volume_fraction
+from b3_micromech.physics_surrogate import DEFAULT_SURROGATE_KIND, train_surrogate
 from b3_micromech.surrogate import (
-    StiffnessSurrogate,
     engineering_constants_batch,
     evaluate_training_holdout,
     predict_random_hypercube_samples,
@@ -90,19 +90,25 @@ def train_three_axis_surrogate(
     stiffness: np.ndarray,
     model_path: Path,
     *,
+    kind: str = DEFAULT_SURROGATE_KIND,
     seed: int = 0,
-) -> StiffnessSurrogate:
-    """Train an MLP with slightly wider hidden layers for the 3-axis grid."""
-    model = StiffnessSurrogate.train(features, stiffness, random_state=seed)
+):
+    """Train residual (default) or requested kind on the 3-axis grid."""
+    train_kw: dict = {}
+    if kind == "mlp":
+        train_kw["random_state"] = seed
+    elif kind == "mf_gp":
+        train_kw["n_restarts"] = 1
+    model = train_surrogate(features, stiffness, kind=kind, **train_kw)
     model.save(model_path)
-    print(f"trained surrogate -> {model_path}")
+    print(f"trained surrogate kind={kind!r} -> {model_path}")
     return model
 
 
 def render_holdout_parity_plots(
     train_features: np.ndarray,
     train_stiffness: np.ndarray,
-    model: StiffnessSurrogate,
+    model,
     plot_dir: Path,
 ) -> dict[str, Path]:
     """Parity plots for $E_1$ and $E_2$ on the training hypercube."""
@@ -146,6 +152,13 @@ def main() -> None:
     ap.add_argument("--n-inference", type=int, default=1000)
     ap.add_argument("--jobs", "-j", type=int, default=1)
     ap.add_argument("--seed", type=int, default=0)
+    ap.add_argument(
+        "--kind",
+        type=str,
+        default=DEFAULT_SURROGATE_KIND,
+        choices=("physics", "mf_gp", "mlp"),
+        help="Surrogate kind (default: physics residual)",
+    )
     ap.add_argument("--skip-sweep", action="store_true")
     args = ap.parse_args()
 
@@ -177,7 +190,9 @@ def main() -> None:
             args.sweep_yaml, dataset_path, n_jobs=args.jobs
         )
 
-    model = train_three_axis_surrogate(features, stiffness, model_path, seed=args.seed)
+    model = train_three_axis_surrogate(
+        features, stiffness, model_path, kind=args.kind, seed=args.seed
+    )
     holdout = evaluate_training_holdout(model, features, stiffness)
     print("hold-out report:")
     for key, value in sorted(holdout.items()):
