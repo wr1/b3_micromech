@@ -85,7 +85,7 @@ jobs:
         run: uv pip install "git+https://github.com/wr1/b3_tex@$(cat ci/b3_tex.ref)"
 
       - name: Run b3_tex integration tests
-        run: uv run pytest tests/test_mesomech.py tests/test_b3tex_parity.py -m b3tex
+        run: uv run pytest tests/test_mesomech.py tests/test_b3tex_parity.py tests/test_cli_flags.py -m b3tex
 
   lint:
     runs-on: ubuntu-latest

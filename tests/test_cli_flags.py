@@ -22,6 +22,7 @@ def _run(*args: str) -> subprocess.CompletedProcess[str]:
     )
 
 
+@pytest.mark.b3tex
 def test_no_disk_cache_is_a_flag():
     result = _run("register-fea-micromech", "--no-disk-cache", "--name", "flag_probe")
     combined = result.stdout + result.stderr

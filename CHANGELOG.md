@@ -10,7 +10,9 @@
   import smoke test, a wheel install, and a `b3_tex` integration job pinned in
   `ci/b3_tex.ref`.
 - Golden `C` / CTE / conductivity arrays for the three bundled RVEs, and a
-  schema-less physics joblib fixture.
+  schema-less physics joblib fixture. The stiffness check allows 1e-6 of
+  max|C|. PyMFEM 4.8 and the locked 4.10 wheels differ by about 1e3 Pa on
+  couplings that are numerical zeros.
 
 ### Changed
 - Fibre `G_TTf` is written through as `nu_tt` (or `g_tt` on the material entry).
