@@ -7,28 +7,33 @@ from typing import TYPE_CHECKING, Any
 import numpy as np
 from numpy.typing import NDArray
 
+import warnings
+
+from b3_micromech.config import ConfigError, SolverConfig
 from b3_micromech.field import FIBRE_ID, MATRIX_ID, sample_material_ids
 
 if TYPE_CHECKING:
     from b3_micromech.problem import RVEProblem
 
 
-def _resolve_material_sampling_spec(solver: dict[str, Any]) -> dict[str, Any]:
-    if "material_sampling" in solver:
-        ms = solver["material_sampling"]
-        return {
-            "strategy": str(ms.get("strategy", "local_cloud")),
-            "resolution": int(ms.get("resolution", 3)),
-            "idw_power": float(ms.get("idw_power", 2.0)),
-        }
-    legacy = str(solver.get("stiffness_sampling", "cell_constant")).lower()
-    if legacy in ("quadrature", "exact"):
-        return {"strategy": "exact", "resolution": 1, "idw_power": 2.0}
-    if legacy in ("centroid", "cell_constant"):
-        return {"strategy": "cell_constant", "resolution": 1, "idw_power": 2.0}
-    if legacy in ("local_cloud", "cloud"):
-        return {"strategy": "local_cloud", "resolution": 3, "idw_power": 2.0}
-    return {"strategy": "cell_constant", "resolution": 1, "idw_power": 2.0}
+def _resolve_material_sampling_spec(
+    solver: SolverConfig | dict[str, Any],
+) -> dict[str, Any]:
+    """Deprecated. Read ``problem.solver.material_sampling`` instead."""
+    warnings.warn(
+        "_resolve_material_sampling_spec is deprecated; read "
+        "problem.solver.material_sampling (removed in 0.3.0)",
+        DeprecationWarning,
+        stacklevel=2,
+    )
+    if not isinstance(solver, SolverConfig):
+        solver = SolverConfig.from_mapping(solver)
+    ms = solver.material_sampling
+    return {
+        "strategy": ms.strategy,
+        "resolution": ms.resolution,
+        "idw_power": ms.idw_power,
+    }
 
 
 def global_stiffness_at_points(
@@ -98,11 +103,19 @@ def effective_stiffnesses_for_gauss_points(
       (gives intermediate stiffness on elements crossing the fibre boundary)
     """
     if spec is None:
-        spec = _resolve_material_sampling_spec(problem.solver)
-
-    strategy = str(spec.get("strategy", "local_cloud"))
-    resolution = int(spec.get("resolution", 3))
-    idw_power = float(spec.get("idw_power", 2.0))
+        ms = problem.solver.material_sampling
+        strategy = ms.strategy
+        resolution = ms.resolution
+        idw_power = ms.idw_power
+    else:
+        strategy = str(spec["strategy"])
+        resolution = int(spec["resolution"])
+        idw_power = float(spec["idw_power"])
+    if strategy not in ("exact", "cell_constant", "local_cloud"):
+        raise ConfigError(
+            f"unknown material sampling strategy {strategy!r}; "
+            "allowed ['cell_constant', 'exact', 'local_cloud']"
+        )
     n_cells = cell_vertices_yz.shape[0]
 
     if strategy == "exact":

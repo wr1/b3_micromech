@@ -154,14 +154,35 @@ def hex_vf_sweep_values(
     return values
 
 
+def check_fibre_volume_fraction(*, shape: DomainShape, vf: float) -> None:
+    """Reject Vf above the packing limit and warn above the 1% standoff maximum."""
+    import warnings
+
+    from b3_micromech.config import ConfigError
+
+    if not 0.0 <= vf <= 1.0:
+        raise ConfigError(f"vf must be in [0, 1], got {vf}")
+    limit = packing_limit_volume_fraction(shape=shape)
+    if vf > limit:
+        raise ConfigError(f"vf {vf} exceeds the {shape} packing limit {limit:.4f}")
+    standoff_max = max_fibre_volume_fraction(
+        shape=shape, domain_size=1.0, standoff=0.01
+    )
+    if vf > standoff_max:
+        warnings.warn(
+            "thin matrix ligament; use AMR / finer mesh",
+            UserWarning,
+            stacklevel=2,
+        )
+
+
 def radius_from_fibre_volume_fraction(
     *,
     shape: DomainShape = "square",
     domain_size: float,
     vf: float,
 ) -> float:
-    if not 0.0 <= vf <= 1.0:
-        raise ValueError("vf must be in [0, 1]")
+    check_fibre_volume_fraction(shape=shape, vf=vf)
     return float(math.sqrt(vf * domain_area(shape=shape, size=domain_size) / math.pi))
 
 

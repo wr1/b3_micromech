@@ -4,7 +4,7 @@ from b3_micromech.problem import RVEProblem
 
 def _problem(vf: float = 0.5) -> RVEProblem:
     cfg = {
-        "domain": {"size": 1.0, "mesh_resolution": [8, 8]},
+        "domain": {"shape": "square", "size": 1.0, "mesh_resolution": [8, 8]},
         "materials": [
             {
                 "name": "matrix",

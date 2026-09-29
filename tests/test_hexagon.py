@@ -130,7 +130,7 @@ def test_hex_amr_example_yaml_loads():
     examples = __import__("pathlib").Path(__file__).resolve().parents[1] / "examples"
     problem = RVEProblem.from_yaml(examples / "ud_transverse_hex_amr.yaml")
     assert problem.domain_shape == "hexagon"
-    assert problem.solver.get("amr", {}).get("enabled") is True
+    assert problem.solver.amr.enabled is True
 
 
 def test_hex_domain_loads_from_yaml():

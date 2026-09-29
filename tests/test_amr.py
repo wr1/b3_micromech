@@ -21,7 +21,11 @@ def _problem(
         solver["amr"] = amr
     return RVEProblem.from_config(
         {
-            "domain": {"size": 1.0, "mesh_resolution": list(resolution)},
+            "domain": {
+                "shape": "square",
+                "size": 1.0,
+                "mesh_resolution": list(resolution),
+            },
             "materials": [
                 {
                     "name": "matrix",

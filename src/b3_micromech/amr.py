@@ -7,6 +7,9 @@ from typing import TYPE_CHECKING, Any
 import numpy as np
 from numpy.typing import NDArray
 
+import warnings
+
+from b3_micromech.config import SolverConfig
 from b3_micromech.field import sample_material_ids
 from b3_micromech.mesh.cartesian import element_cell_vertices_yz
 from b3_micromech.quadrature import global_stiffness_at_points
@@ -17,18 +20,24 @@ if TYPE_CHECKING:
 DEFAULT_AMR_SUB_SAMPLES: int = 64
 
 
-def _resolve_amr_spec(solver: dict[str, Any]) -> dict[str, Any]:
-    amr = solver.get("amr", {})
+def _resolve_amr_spec(solver: SolverConfig | dict[str, Any]) -> dict[str, Any]:
+    """Deprecated. Read ``problem.solver.amr`` instead."""
+    warnings.warn(
+        "_resolve_amr_spec is deprecated; read problem.solver.amr (removed in 0.3.0)",
+        DeprecationWarning,
+        stacklevel=2,
+    )
+    if not isinstance(solver, SolverConfig):
+        solver = SolverConfig.from_mapping(solver)
+    amr = solver.amr
     return {
-        "enabled": bool(amr.get("enabled", False)),
-        "max_iterations": int(amr.get("max_iterations", 3)),
-        "threshold": float(amr.get("threshold", 0.15)),
-        "dof_budget": int(amr.get("dof_budget", 50_000)),
-        "n_samples_per_cell": int(
-            amr.get("n_samples_per_cell", DEFAULT_AMR_SUB_SAMPLES)
-        ),
-        "marker": str(amr.get("marker", "stiffness_jump")),
-        "n_uniform_refines": int(amr.get("n_uniform_refines", 0)),
+        "enabled": amr.enabled,
+        "max_iterations": amr.max_iterations,
+        "threshold": amr.threshold,
+        "dof_budget": amr.dof_budget,
+        "n_samples_per_cell": amr.n_samples_per_cell,
+        "marker": amr.marker,
+        "n_uniform_refines": amr.n_uniform_refines,
     }
 
 
@@ -232,19 +241,19 @@ def iteratively_refine_mfem(
 def apply_optional_refinement(
     mesh, problem: RVEProblem
 ) -> tuple[Any, list[dict[str, Any]]]:
-    spec = _resolve_amr_spec(problem.solver)
+    amr = problem.solver.amr
     history: list[dict[str, Any]] = []
-    for _ in range(spec["n_uniform_refines"]):
+    for _ in range(amr.n_uniform_refines):
         mesh.UniformRefinement()
-    if not spec["enabled"]:
+    if not amr.enabled:
         return mesh, history
     mesh, history = iteratively_refine_mfem(
         mesh,
         problem,
-        threshold=spec["threshold"],
-        max_iterations=spec["max_iterations"],
-        dof_budget=spec["dof_budget"],
-        n_samples_per_cell=spec["n_samples_per_cell"],
-        marker=spec["marker"],
+        threshold=amr.threshold,
+        max_iterations=amr.max_iterations,
+        dof_budget=amr.dof_budget,
+        n_samples_per_cell=amr.n_samples_per_cell,
+        marker=amr.marker,
     )
     return mesh, history

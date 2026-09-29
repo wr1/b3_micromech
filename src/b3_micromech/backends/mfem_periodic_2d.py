@@ -9,10 +9,7 @@ from numpy.typing import NDArray
 
 from b3_micromech.mesh.build import build_mesh
 from b3_micromech.mesh.cartesian import element_cell_vertices_yz, element_material_ids
-from b3_micromech.quadrature import (
-    _resolve_material_sampling_spec,
-    effective_stiffnesses_for_gauss_points,
-)
+from b3_micromech.quadrature import effective_stiffnesses_for_gauss_points
 from b3_micromech.periodic import origin_vertex_index, periodic_vertex_master_map
 from b3_micromech.result import LoadcaseResult
 from b3_micromech.problem import RVEProblem
@@ -94,13 +91,11 @@ def _collect_element_gp_data(mesh, fespace, problem: RVEProblem) -> _ElementGPDa
             gp_weights[idx] = ip.weight * T.Weight()
 
     cell_vertices = element_cell_vertices_yz(mesh)
-    sampling_spec = _resolve_material_sampling_spec(problem.solver)
     c_per_gp[:] = effective_stiffnesses_for_gauss_points(
         problem,
         gp_coords_yz,
         gp_cell_ids,
         cell_vertices,
-        spec=sampling_spec,
     )
 
     return _ElementGPData(
@@ -206,13 +201,11 @@ def _collect_alpha_at_gps(mesh, fespace, problem: RVEProblem) -> NDArray[np.floa
     from b3_micromech.quadrature import effective_stiffnesses_for_gauss_points
 
     cell_vertices = element_cell_vertices_yz(mesh)
-    sampling_spec = _resolve_material_sampling_spec(problem.solver)
     c_all = effective_stiffnesses_for_gauss_points(
         problem,
         gp_coords_yz,
         gp_cell_ids,
         cell_vertices,
-        spec=sampling_spec,
     )
 
     # For each GP, pick the material that the stiffness field assigned
@@ -446,8 +439,8 @@ def solve_periodic_plane_strain(
         "n_cells": int(session.mesh.GetNE()),
         "n_dofs": int(session.fespace.GetTrueVSize()),
         "fibre_volume_fraction": problem.fibre_volume_fraction,
-        "material_sampling": _resolve_material_sampling_spec(problem.solver),
-        "amr": problem.solver.get("amr", {}),
+        "material_sampling": problem.solver.material_sampling.to_dict(),
+        "amr": problem.solver.amr.to_dict(),
     }
     return C_eff, meta
 

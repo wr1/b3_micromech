@@ -11,7 +11,7 @@ from pathlib import Path
 import numpy as np
 from numpy.typing import NDArray
 
-from b3_micromech.amr import _resolve_amr_spec, cell_refinement_metric
+from b3_micromech.amr import cell_refinement_metric
 from b3_micromech.geometry import hexagon_corners
 from b3_micromech.mesh.cartesian import mesh_vertices_and_cells
 from b3_micromech.postprocess import LoadcaseSet
@@ -150,7 +150,7 @@ def _draw_mesh_cells(
 
 
 def _amr_enabled(problem) -> bool:
-    return bool(_resolve_amr_spec(problem.solver).get("enabled", False))
+    return bool(problem.solver.amr.enabled)
 
 
 def _finish_mesh_axes(ax, problem) -> None:
@@ -167,13 +167,13 @@ def plot_amr_refinement(loadcases: LoadcaseSet, out_path: str | Path) -> Path:
     from matplotlib.collections import PolyCollection
 
     problem = loadcases.problem
-    amr = _resolve_amr_spec(problem.solver)
+    amr = problem.solver.amr
     mesh = loadcases.session.mesh
     metric = cell_refinement_metric(
         problem,
         mesh,
-        marker=amr["marker"],
-        n_samples_per_cell=amr["n_samples_per_cell"],
+        marker=amr.marker,
+        n_samples_per_cell=amr.n_samples_per_cell,
     )
 
     vertices, cells = mesh_vertices_and_cells(mesh)
@@ -187,7 +187,7 @@ def plot_amr_refinement(loadcases: LoadcaseSet, out_path: str | Path) -> Path:
     area_ratio = (
         float(area_max / max(float(np.min(areas)), 1e-30)) if areas.size else 1.0
     )
-    threshold = amr["threshold"]
+    threshold = amr.threshold
     n_cells = int(mesh.GetNE())
 
     fig, (ax_size, ax_mark) = plt.subplots(
@@ -219,7 +219,7 @@ def plot_amr_refinement(loadcases: LoadcaseSet, out_path: str | Path) -> Path:
     ax_mark.add_collection(coll_mark)
     _draw_fibre_outline(ax_mark, problem, edgecolor="#ffffff")
     _finish_mesh_axes(ax_mark, problem)
-    ax_mark.set_title(f"AMR marker ({amr['marker']})")
+    ax_mark.set_title(f"AMR marker ({amr.marker})")
     cbar_mark = fig.colorbar(coll_mark, ax=ax_mark, shrink=0.85)
     cbar_mark.ax.axhline(threshold, color="#4fc3f7", linewidth=1.0, linestyle="--")
     cbar_mark.set_label("stiffness-jump score")

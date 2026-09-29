@@ -13,7 +13,7 @@ EXAMPLES = __import__("pathlib").Path(__file__).resolve().parents[1] / "examples
 
 def test_homogeneous_matrix_recovers_stiffness():
     cfg = {
-        "domain": {"size": 1.0, "mesh_resolution": [12, 12]},
+        "domain": {"shape": "square", "size": 1.0, "mesh_resolution": [12, 12]},
         "materials": [
             {
                 "name": "matrix",
@@ -47,7 +47,7 @@ def test_ud_rve_agrees_with_mori_tanaka_transverse():
     problem = RVEProblem.from_yaml(EXAMPLES / "ud_transverse.yaml")
     problem = RVEProblem.from_config(
         {
-            "domain": {"size": 1.0, "mesh_resolution": [48, 48]},
+            "domain": {"shape": "square", "size": 1.0, "mesh_resolution": [48, 48]},
             "materials": [
                 {
                     "name": "matrix",

@@ -13,6 +13,13 @@
   schema-less physics joblib fixture.
 
 ### Changed
+- Omitted material sampling is `local_cloud` at resolution 6. Square and hex
+  example RVEs that did not pin a strategy move by about 2.4% and 0.86% of
+  max|C| respectively. Pin `material_sampling: {strategy: cell_constant}` to
+  reproduce 0.1.0.
+- Unknown configuration keys and enum values raise `ConfigError`.
+- Fibre volume fraction above the packing limit raises; above the 1% standoff
+  maximum it warns.
 - Requires Python >= 3.11.
 - `scipy` and `triangle` are core dependencies. `mfem` is pinned to `>=4.8,<4.11`.
   `treeparse` is pinned to `>=0.3,<0.4`. `scikit-learn` is pinned to `>=1.3,<2`.
