@@ -13,6 +13,9 @@
   schema-less physics joblib fixture.
 
 ### Changed
+- Fibre `G_TTf` is written through as `nu_tt` (or `g_tt` on the material entry).
+  The template `nu_tt` no longer wins, so existing sweep datasets are
+  uncorrelated in that column and should be retrained.
 - Omitted material sampling is `local_cloud` at resolution 6. Square and hex
   example RVEs that did not pin a strategy move by about 2.4% and 0.86% of
   max|C| respectively. Pin `material_sampling: {strategy: cell_constant}` to

@@ -319,6 +319,7 @@ def _run(
     resolution_override: int | None = None,
 ) -> Path:
     """Run end-to-end homogenisation for all samples. Returns the NPZ path."""
+    from b3_micromech.contract import FEATURE_NAMES
     from b3_micromech.sweep import run_sweep
 
     results: list[dict[str, Any]] = []
@@ -408,9 +409,7 @@ def _run(
         npz_path,
         X=X_out,
         C=C_out,
-        feature_names=np.array(
-            ["vf", "E_m", "nu_m", "E_Lf", "E_Tf", "G_LTf", "nu_LTf", "G_TTf"]
-        ),
+        feature_names=np.array(FEATURE_NAMES),
     )
     meta_path = out_dir / "sweep_results.meta.json"
     meta_path.write_text(

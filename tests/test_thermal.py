@@ -5,11 +5,12 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from b3_micromech.features import (
-    _build_mech_features_matrix,
-    build_feature_matrix,
-    constituent_thermal_properties,
+from b3_micromech.contract import (
+    FEATURE_NAMES,
+    THERMAL_FEATURE_NAMES,
+    Constituents,
 )
+from b3_micromech.features import _build_mech_features_matrix
 from b3_micromech.homogenize import (
     HomogenizationResult,
     effective_thermal_expansion_volume_average,
@@ -161,13 +162,11 @@ class TestFeatures:
             alpha_l=0.5e-6,
             alpha_t=12.0e-6,
         )
-        a_m, a_Lf, a_Tf, k_m = constituent_thermal_properties(  # type: ignore[arg-type]
-            matrix, fibre
-        )
-        assert a_m == pytest.approx(40.0e-6)
-        assert a_Lf == pytest.approx(0.5e-6)
-        assert a_Tf == pytest.approx(12.0e-6)
-        assert k_m == pytest.approx(0.25)
+        constituents = Constituents.from_materials(matrix, fibre)
+        assert constituents.alpha_m == pytest.approx(40.0e-6)
+        assert constituents.alpha_Lf == pytest.approx(0.5e-6)
+        assert constituents.alpha_Tf == pytest.approx(12.0e-6)
+        assert constituents.k_m == pytest.approx(0.25)
 
     def test_12_col_feature_matrix(self):
         vf = np.array([0.3, 0.5, 0.7], dtype=float)
@@ -190,10 +189,12 @@ class TestFeatures:
             alpha_l=0.5e-6,
             alpha_t=12.0e-6,
         )
-        feat = build_feature_matrix(vf, matrix=mat, fibre=fib)
+        constituents = Constituents.from_materials(mat, fib)
+        feat = constituents.feature_matrix(
+            vf, names=FEATURE_NAMES + THERMAL_FEATURE_NAMES
+        )
         assert feat.shape == (3, 12)
-        # first 8 = mechanical
-        mech = _build_mech_features_matrix(vf, matrix=mat, fibre=fib)
+        mech = constituents.feature_matrix(vf, names=FEATURE_NAMES)
         assert np.allclose(feat[:, :8], mech)
         # last 4 = thermal
         assert feat[0, 8] == pytest.approx(40.0e-6)  # alpha_m

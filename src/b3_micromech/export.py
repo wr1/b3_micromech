@@ -8,16 +8,7 @@ from pathlib import Path
 import numpy as np
 from numpy.typing import NDArray
 
-SURROGATE_FEATURE_NAMES: tuple[str, ...] = (
-    "vf",
-    "E_m",
-    "nu_m",
-    "E_Lf",
-    "E_Tf",
-    "G_LTf",
-    "nu_LTf",
-    "G_TTf",
-)
+from b3_micromech.contract import FEATURE_NAMES as SURROGATE_FEATURE_NAMES
 
 
 def save_dataset(

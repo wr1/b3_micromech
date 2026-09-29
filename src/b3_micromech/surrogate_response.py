@@ -9,7 +9,7 @@ from numpy.typing import NDArray
 
 from typing import Any, Protocol
 
-from b3_micromech.export import SURROGATE_FEATURE_NAMES
+from b3_micromech.contract import FEATURE_NAMES
 from b3_micromech.surrogate import engineering_constants_batch
 
 
@@ -18,10 +18,14 @@ class _PredictsStiffness(Protocol):
 
 
 SURROGATE_FEATURE_INDEX: dict[str, int] = {
-    name: i for i, name in enumerate(SURROGATE_FEATURE_NAMES)
+    name: i for i, name in enumerate(FEATURE_NAMES)
 }
 
-DEFAULT_THREE_AXIS_RESPONSE: tuple[str, str, str] = ("vf", "E_m", "E_Lf")
+DEFAULT_THREE_AXIS_RESPONSE: tuple[str, str, str] = (
+    FEATURE_NAMES[0],
+    FEATURE_NAMES[1],
+    FEATURE_NAMES[3],
+)
 
 
 def midpoint_feature_vector(bounds: NDArray[np.float64]) -> NDArray[np.float64]:

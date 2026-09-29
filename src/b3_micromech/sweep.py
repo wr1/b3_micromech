@@ -3,13 +3,13 @@
 from __future__ import annotations
 
 import itertools
-from copy import deepcopy
 from typing import Any
 
 import numpy as np
 import yaml
 from numpy.typing import NDArray
 
+from b3_micromech.contract import constituents_for_point, rve_config
 from b3_micromech.export import save_dataset
 from b3_micromech.geometry import HexVfSweepPreset, hex_vf_sweep_values
 from b3_micromech.homogenize import homogenize, surrogate_features
@@ -80,44 +80,17 @@ def problem_from_sweep_point(
 
 
 def _apply_point(base: dict[str, Any], point: dict[str, float]) -> RVEProblem:
-    cfg = deepcopy(base)
-    rve = cfg.setdefault("rve", {})
-    materials = {m["name"]: m for m in cfg["materials"]}
-
-    if "vf" in point:
-        rve["fibre_volume_fraction"] = point["vf"]
-    if "E_m" in point:
-        materials["matrix"]["youngs_modulus"] = point["E_m"]
-    if "nu_m" in point:
-        materials["matrix"]["poisson_ratio"] = point["nu_m"]
-    for key, mat_key in (
-        ("E_Lf", "e_l"),
-        ("E_Tf", "e_t"),
-        ("G_LTf", "g_lt"),
-        ("nu_LTf", "nu_lt"),
-        ("G_TTf", "g_tt"),
-    ):
-        if key in point:
-            materials["fibre"][mat_key] = point[key]
-    for key, mat_key in (
-        ("k_l", "k_l"),
-        ("k_t", "k_t"),
-        ("alpha_l", "alpha_l"),
-        ("alpha_t", "alpha_t"),
-    ):
-        if key in point:
-            materials["fibre"][mat_key] = point[key]
-    cfg["materials"] = list(materials.values())
-
-    if "mesh" in cfg.get("sweep", {}):
-        mesh = cfg["sweep"]["mesh"]
+    constituents, vf = constituents_for_point(base, point)
+    cfg = rve_config(base, constituents, vf)
+    # Mesh overrides stay here until SweepSpec (A6).
+    if "mesh" in base.get("sweep", {}):
+        mesh = base["sweep"]["mesh"]
         cfg.setdefault("domain", {})
         if "resolution" in mesh:
             cfg["domain"]["mesh_resolution"] = mesh["resolution"]
         if "cell_type" in mesh:
             cfg.setdefault("solver", {})
             cfg["solver"]["cell_type"] = mesh["cell_type"]
-
     return RVEProblem.from_config(cfg)
 
 

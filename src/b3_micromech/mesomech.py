@@ -12,12 +12,12 @@ import numpy as np
 import yaml
 from numpy.typing import NDArray
 
-from b3_micromech.features import (
-    build_feature_matrix,
-    constituent_engineering_constants,
-    constituent_thermal_properties,
-    warn_if_out_of_bounds,
+from b3_micromech.contract import (
+    FEATURE_NAMES,
+    THERMAL_FEATURE_NAMES,
+    Constituents,
 )
+from b3_micromech.features import warn_if_out_of_bounds
 from b3_micromech.lut_cache import (
     default_cache_dir,
     load_lut_cache,
@@ -31,8 +31,8 @@ logger = logging.getLogger(__name__)
 # Repo root when installed editable (…/b3_micromech/src/b3_micromech/mesomech.py).
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_RVE_YAML = _REPO_ROOT / "examples" / "sweep_hex_hypercube.yaml"
-# Stiffness surrogates (mlp / physics / mf_gp) train on 8 mechanical columns.
-N_MECH_FEATURES = 8
+# Stiffness surrogates (mlp / physics / mf_gp) train on the mechanical columns.
+N_MECH_FEATURES = len(FEATURE_NAMES)
 
 
 def _resolve_rve_yaml(rve_yaml: str | Path) -> Path:
@@ -58,52 +58,37 @@ def _load_rve_base(rve_yaml: str | Path) -> dict[str, Any]:
         return yaml.safe_load(f)
 
 
-def _mechanical_features_for_model(
+def _features_for_model(
     vf: NDArray[np.float64],
     matrix: Any,
     fibre: Any,
     model: Any,
 ) -> NDArray[np.float64]:
-    """Build feature rows clipped to the surrogate's trained feature width.
-
-    Always feeds the first 8 mechanical columns to stiffness surrogates so
-    optional thermal columns from ``build_feature_matrix`` never break
-    ``mlp`` / ``physics`` / ``mf_gp`` predictors. Width is taken from
-    ``model.feature_bounds`` when present.
-    """
-    features = build_feature_matrix(vf, matrix=matrix, fibre=fibre)
-    n_feat = N_MECH_FEATURES
-    bounds = getattr(model, "feature_bounds", None)
-    if bounds is not None:
-        n_feat = int(np.asarray(bounds).shape[0])
-    if features.shape[1] > n_feat:
-        features = features[:, :n_feat]
-    elif features.shape[1] < n_feat:
-        raise ValueError(
-            f"feature matrix has {features.shape[1]} columns but model expects {n_feat}"
-        )
-    return features
+    """Feature rows named by ``model.feature_names``, else the mechanical contract."""
+    constituents = Constituents.from_materials(matrix, fibre)
+    names = getattr(model, "feature_names", None)
+    if names is None:
+        names = FEATURE_NAMES
+    return constituents.feature_matrix(vf, names=tuple(names))
 
 
 def _sweep_point_from_materials(vf: float, matrix: Any, fibre: Any) -> dict[str, float]:
-    em, num, elf, etf, gltf, nultf, gttf = constituent_engineering_constants(
-        matrix, fibre
-    )
-    a_m, a_Lf, a_Tf, k_m_val = constituent_thermal_properties(matrix, fibre)
-    return {
+    constituents = Constituents.from_materials(matrix, fibre)
+    point = {
         "vf": float(vf),
-        "E_m": em,
-        "nu_m": num,
-        "E_Lf": elf,
-        "E_Tf": etf,
-        "G_LTf": gltf,
-        "nu_LTf": nultf,
-        "G_TTf": gttf,
-        "alpha_m": a_m,
-        "alpha_Lf": a_Lf,
-        "alpha_Tf": a_Tf,
-        "k_m": k_m_val,
+        "E_m": constituents.E_m,
+        "nu_m": constituents.nu_m,
+        "E_Lf": constituents.E_Lf,
+        "E_Tf": constituents.E_Tf,
+        "G_LTf": constituents.G_LTf,
+        "nu_LTf": constituents.nu_LTf,
+        "G_TTf": constituents.G_TTf,
     }
+    for name in THERMAL_FEATURE_NAMES:
+        value = getattr(constituents, name)
+        if value is not None:
+            point[name] = float(value)
+    return point
 
 
 def _homogenize_vf_batch(
@@ -200,7 +185,7 @@ class FeaMicromechMicromodel:
                     return stiffness
 
         if self.model is not None:
-            features = _mechanical_features_for_model(vf_arr, matrix, fibre, self.model)
+            features = _features_for_model(vf_arr, matrix, fibre, self.model)
             warn_if_out_of_bounds(
                 features, self.model.feature_bounds, context="stiffness_batch"
             )
@@ -362,7 +347,7 @@ def predict_stiffness_batch(
         return model.stiffness_batch(matrix=matrix, fibre=fibre, vf=vf)
     surrogate = _as_stiffness_predictor(model)
     vf_arr = np.asarray(vf, dtype=float).ravel()
-    features = _mechanical_features_for_model(vf_arr, matrix, fibre, surrogate)
+    features = _features_for_model(vf_arr, matrix, fibre, surrogate)
     if warn_oob:
         warn_if_out_of_bounds(
             features, surrogate.feature_bounds, context="predict_stiffness_batch"

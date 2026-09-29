@@ -12,7 +12,7 @@ from b3_micromech.backends.mfem_periodic_2d import (
     solve_thermal_loadcase,
     effective_conductivity_tensor,
 )
-from b3_micromech.features import build_feature_matrix
+from b3_micromech.contract import FEATURE_NAMES, Constituents
 from b3_micromech.problem import RVEProblem
 
 
@@ -70,8 +70,7 @@ def surrogate_features(problem: RVEProblem) -> NDArray[np.float64]:
     """Feature vector aligned with ``b3_tex.micromodels.SurrogateModel``."""
     matrix = problem.materials[problem.matrix_material]
     fibre = problem.materials[problem.fibre_material]
-    return build_feature_matrix(
+    return Constituents.from_materials(matrix, fibre).feature_matrix(
         np.array([problem.fibre_volume_fraction], dtype=float),
-        matrix=matrix,
-        fibre=fibre,
+        names=FEATURE_NAMES,
     )[0]
