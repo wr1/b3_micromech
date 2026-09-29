@@ -1,11 +1,10 @@
+import os
+
 import numpy as np
 import pytest
 
-from b3_micromech.features import (
-    build_feature_matrix,
-    constituent_engineering_constants,
-    features_out_of_bounds,
-)
+from b3_micromech.contract import FEATURE_NAMES, Constituents
+from b3_micromech.features import features_out_of_bounds
 from b3_micromech.homogenize import surrogate_features
 from b3_micromech.lut_cache import (
     load_lut_cache,
@@ -23,6 +22,19 @@ from b3_micromech.mesomech import (
 )
 from b3_micromech.problem import RVEProblem
 from b3_micromech.surrogate import StiffnessSurrogate
+
+
+def require_b3_tex():
+    """Import b3_tex, or skip only when B3_MICROMECH_ALLOW_NO_B3TEX=1."""
+    try:
+        import b3_tex
+    except ImportError as exc:
+        if os.environ.get("B3_MICROMECH_ALLOW_NO_B3TEX") == "1":
+            pytest.skip("b3_tex not installed (B3_MICROMECH_ALLOW_NO_B3TEX=1)")
+        raise RuntimeError(
+            "b3_tex is not installed. Set B3_MICROMECH_ALLOW_NO_B3TEX=1 to skip."
+        ) from exc
+    return b3_tex
 
 
 def _constituents():
@@ -77,17 +89,18 @@ def test_build_feature_matrix_matches_surrogate_features():
     matrix = problem.materials[problem.matrix_material]
     fibre = problem.materials[problem.fibre_material]
     vf = np.array([0.2, problem.fibre_volume_fraction, 0.8])
-    built = build_feature_matrix(vf, matrix=matrix, fibre=fibre)
+    built = Constituents.from_materials(matrix, fibre).feature_matrix(
+        vf, names=FEATURE_NAMES
+    )
     assert built.shape == (3, 8)
     np.testing.assert_allclose(built[1], surrogate_features(problem))
 
 
 def test_constituent_engineering_constants():
     matrix, fibre = _constituents()
-    scalars = constituent_engineering_constants(matrix, fibre)
-    assert len(scalars) == 7
-    assert scalars[0] == pytest.approx(3e9)
-    assert scalars[2] == pytest.approx(230e9)
+    constituents = Constituents.from_materials(matrix, fibre)
+    assert constituents.E_m == pytest.approx(3e9)
+    assert constituents.E_Lf == pytest.approx(230e9)
 
 
 def test_features_out_of_bounds():
@@ -225,12 +238,17 @@ def test_fea_surrogate_from_joblib_roundtrip(tmp_path):
     vf = np.array([0.4, 0.6])
     np.testing.assert_allclose(
         loaded.stiffness_batch(matrix=matrix, fibre=fibre, vf=vf),
-        model.predict(build_feature_matrix(vf, matrix=matrix, fibre=fibre)),
+        model.predict(
+            Constituents.from_materials(matrix, fibre).feature_matrix(
+                vf, names=FEATURE_NAMES
+            )
+        ),
     )
 
 
+@pytest.mark.b3tex
 def test_register_fea_micromech_with_b3_tex(tmp_path):
-    pytest.importorskip("b3_tex")
+    require_b3_tex()
     from b3_tex.materials import MicromechanicalMaterial
     from b3_tex.micromodels import get_micromodel
 
@@ -257,19 +275,63 @@ def test_register_fea_micromech_with_b3_tex(tmp_path):
     assert table.shape == (32, 6, 6)
 
 
+@pytest.mark.b3tex
 def test_build_feature_matrix_accepts_b3_tex_materials():
     """b3_tex Material has no thermal tensors — still yields (N, 8) features."""
-    pytest.importorskip("b3_tex")
+    require_b3_tex()
     from b3_tex.materials import Material as TexMaterial
 
     matrix = TexMaterial.isotropic("m", youngs_modulus=3e9, poisson_ratio=0.35)
     fibre = TexMaterial.transverse_isotropic(
         "f", e_l=230e9, e_t=15e9, g_lt=15e9, nu_lt=0.2, nu_tt=0.3
     )
-    features = build_feature_matrix(np.array([0.4, 0.6]), matrix=matrix, fibre=fibre)
+    features = Constituents.from_materials(matrix, fibre).feature_matrix(
+        np.array([0.4, 0.6]), names=FEATURE_NAMES
+    )
     assert features.shape == (2, 8)
     assert np.allclose(features[:, 0], [0.4, 0.6])
     assert np.allclose(features[:, 1], 3e9)
+
+
+@pytest.mark.b3tex
+@pytest.mark.mfem
+def test_b3tex_fibre_g_tt_reaches_the_fea():
+    """A b3_tex fibre nu_tt must change C; the template nu_tt must not win."""
+    require_b3_tex()
+    from copy import deepcopy
+
+    from b3_tex.materials import Material as TexMaterial
+
+    from b3_micromech.contract import Constituents
+    from b3_micromech.homogenize import homogenize
+
+    matrix = TexMaterial.isotropic("m", youngs_modulus=3.0e9, poisson_ratio=0.35)
+    fibre = TexMaterial.transverse_isotropic(
+        "f", e_l=230.0e9, e_t=15.0e9, g_lt=15.0e9, nu_lt=0.2, nu_tt=0.45
+    )
+    assert Constituents.from_materials(matrix, fibre).nu_TTf == pytest.approx(
+        0.45, abs=1e-12
+    )
+    model = fea_micromech_model(disk_cache=False)
+    solved = model.stiffness(matrix=matrix, fibre=fibre, fibre_volume_fraction=0.5)
+
+    def _with_nu(nu_tt: float):
+        template = deepcopy(model.rve_base)
+        fibre_name = template["rve"]["fibre_material"]
+        for entry in template["materials"]:
+            if entry["name"] == fibre_name:
+                entry["nu_tt"] = nu_tt
+        template["rve"]["fibre_volume_fraction"] = 0.5
+        return homogenize(RVEProblem.from_config(template)).effective_stiffness
+
+    hand = _with_nu(0.45)
+    other = _with_nu(0.30)
+    scale = float(np.max(np.abs(hand)))
+    # Reconstructed moduli differ from the template literals by ~1 ulp, which
+    # moves the small coupling terms. The tensors still agree well inside 1e-8
+    # of max|C|, and the nu_tt=0.30 template does not.
+    assert float(np.max(np.abs(solved - hand))) <= 1e-8 * scale
+    assert float(np.max(np.abs(hand - other))) > 1e-3 * scale
 
 
 def _synthetic_fea_like_for_physics(n: int = 36, seed: int = 0):
@@ -298,11 +360,12 @@ def _synthetic_fea_like_for_physics(n: int = 36, seed: int = 0):
     return features, stiffness
 
 
+@pytest.mark.b3tex
 @pytest.mark.parametrize("kind", ["physics", "mf_gp"])
 def test_physics_kinds_register_and_lut_with_b3_tex(tmp_path, kind):
     """New residual surrogates load via mesomech and drive b3_tex LUTs."""
     pytest.importorskip("sklearn")
-    pytest.importorskip("b3_tex")
+    require_b3_tex()
     from b3_micromech.physics_surrogate import train_surrogate
     from b3_tex.materials import Material as TexMaterial
     from b3_tex.materials import MicromechanicalMaterial

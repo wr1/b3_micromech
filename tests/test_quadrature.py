@@ -10,7 +10,7 @@ from b3_micromech.quadrature import (
 def _fibre_problem(vf: float = 0.5) -> RVEProblem:
     return RVEProblem.from_config(
         {
-            "domain": {"size": 1.0, "mesh_resolution": [4, 4]},
+            "domain": {"shape": "square", "size": 1.0, "mesh_resolution": [4, 4]},
             "materials": [
                 {
                     "name": "matrix",

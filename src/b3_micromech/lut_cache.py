@@ -12,7 +12,7 @@ from typing import Any
 import numpy as np
 from numpy.typing import NDArray
 
-from b3_micromech.features import constituent_engineering_constants
+from b3_micromech.contract import Constituents
 
 CACHE_VERSION = 1
 
@@ -34,7 +34,8 @@ def rve_config_fingerprint(cfg: dict[str, Any]) -> str:
 
 def constituent_fingerprint(matrix: Any, fibre: Any) -> str:
     """Hash the seven surrogate feature moduli extracted from constituents."""
-    vals = constituent_engineering_constants(matrix, fibre)
+    c = Constituents.from_materials(matrix, fibre)
+    vals = (c.E_m, c.nu_m, c.E_Lf, c.E_Tf, c.G_LTf, c.nu_LTf, c.G_TTf)
     rounded = [float(f"{v:.8g}") for v in vals]
     payload = json.dumps(rounded, sort_keys=True)
     return hashlib.sha256(payload.encode()).hexdigest()[:16]

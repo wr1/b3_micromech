@@ -10,7 +10,8 @@ from b3_micromech.plot import render_all_figures
 from b3_micromech.postprocess import solve_all_loadcases
 from b3_micromech.problem import RVEProblem
 from b3_micromech.reference import chamis_ud_stiffness, mori_tanaka_cylinder
-from b3_micromech.features import build_feature_matrix, features_out_of_bounds
+from b3_micromech.contract import Constituents
+from b3_micromech.features import _names_for, features_out_of_bounds
 from b3_micromech.mesomech import (
     constituents_from_yaml,
     predict_stiffness_batch,
@@ -89,8 +90,7 @@ def _solve_cmd(config: str, out: str, plot: bool, plot_scale: float) -> None:
     )
     print(f"wrote {out_dir / 'C_eff.npz'}")
     if plot:
-        scale = None if plot_scale < 0 else plot_scale
-        _plot_cmd(config, str(out_dir / "plots"), scale)
+        _plot_cmd(config, str(out_dir / "plots"), plot_scale)
 
 
 def _plot_cmd(config: str, out: str, scale: float) -> None:
@@ -168,7 +168,8 @@ def _predict_batch_cmd(
     vf_arr = _parse_vf_list(vf, vf_npy, vf_linspace)
     matrix, fibre = constituents_from_yaml(constituents)
     stiffness = predict_stiffness_batch(surrogate, vf_arr, matrix, fibre)
-    features = build_feature_matrix(vf_arr, matrix=matrix, fibre=fibre)
+    constituents = Constituents.from_materials(matrix, fibre)
+    features = constituents.feature_matrix(vf_arr, names=_names_for(constituents))
     oob = features_out_of_bounds(features, surrogate.feature_bounds)
     out_path = Path(out)
     out_path.parent.mkdir(parents=True, exist_ok=True)
@@ -243,8 +244,7 @@ _app = cli(
                 ),
                 option(
                     flags=["--plot", "-p"],
-                    arg_type=bool,
-                    default=False,
+                    flag=True,
                     help="Also write loadcase deformation plots under <out>/plots/.",
                 ),
                 option(
@@ -450,8 +450,7 @@ _app = cli(
                 ),
                 option(
                     flags=["--no-disk-cache"],
-                    arg_type=bool,
-                    default=False,
+                    flag=True,
                     help="Disable disk LUT cache.",
                 ),
             ],

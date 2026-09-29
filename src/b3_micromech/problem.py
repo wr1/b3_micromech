@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+import json
+import warnings
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -10,14 +12,26 @@ import numpy as np
 import yaml
 from numpy.typing import NDArray
 
+from b3_micromech.config import ConfigError, SolverConfig
 from b3_micromech.geometry import (
     DomainShape,
+    check_fibre_volume_fraction,
     fibre_centre,
     fibre_volume_fraction_from_radius,
     hexagon_bounding_box,
     radius_from_fibre_volume_fraction,
 )
 from b3_micromech.materials import Material, load_materials
+
+_TOP_KEYS = {"domain", "materials", "rve", "solver", "periodic_tolerance", "sweep"}
+_DOMAIN_KEYS = {"shape", "size", "mesh_resolution"}
+_RVE_KEYS = {
+    "matrix_material",
+    "fibre_material",
+    "fibre_volume_fraction",
+    "fibre_radius",
+    "centre",
+}
 
 
 def _normalize_domain_shape(raw: str) -> DomainShape:
@@ -44,7 +58,13 @@ class RVEProblem:
     fibre_volume_fraction: float
     centre_yz: NDArray[np.float64]
     periodic_tolerance: float
-    solver: dict[str, Any]
+    solver: SolverConfig
+    material_configs: tuple[str, ...] = field(default=(), hash=False, compare=False)
+
+    @property
+    def solver_dict(self) -> dict[str, Any]:
+        """Dict view of :attr:`solver`. Removed in 0.3.0."""
+        return self.solver.to_dict()
 
     @property
     def size_yz(self) -> tuple[float, float]:
@@ -58,27 +78,87 @@ class RVEProblem:
         ymax, zmax = self.size_yz
         return (0.0, ymax, 0.0, zmax)
 
+    def to_config(self) -> dict[str, Any]:
+        """Canonical config. ``sweep`` is omitted; material entries are as loaded."""
+        return {
+            "domain": {
+                "shape": self.domain_shape,
+                "size": self.domain_size,
+                "mesh_resolution": list(self.mesh_resolution),
+            },
+            "materials": [json.loads(item) for item in self.material_configs],
+            "rve": {
+                "matrix_material": self.matrix_material,
+                "fibre_material": self.fibre_material,
+                "fibre_volume_fraction": self.fibre_volume_fraction,
+                "centre": [float(self.centre_yz[0]), float(self.centre_yz[1])],
+            },
+            "solver": self.solver.to_dict(),
+            "periodic_tolerance": self.periodic_tolerance,
+        }
+
     @classmethod
     def from_config(cls, config: dict[str, Any]) -> RVEProblem:
-        domain = config["domain"]
-        shape = _normalize_domain_shape(domain.get("shape", "square"))
-        size = float(domain.get("size", domain.get("side", 1.0)))
+        raw = dict(config)
+        if "field" in raw:
+            warnings.warn(
+                "top-level 'field' is deprecated; use 'rve' (removed in 0.3.0)",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+            raw.setdefault("rve", raw.pop("field"))
+        unknown = sorted(set(raw) - _TOP_KEYS)
+        if unknown:
+            raise ConfigError(
+                f"config: unknown key(s) {unknown}; allowed {sorted(_TOP_KEYS)}"
+            )
+        raw.pop("sweep", None)
+
+        domain = dict(raw["domain"])
+        if "side" in domain:
+            warnings.warn(
+                "domain.side is deprecated; use domain.size (removed in 0.3.0)",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+            domain.setdefault("size", domain.pop("side"))
+        unknown_domain = sorted(set(domain) - _DOMAIN_KEYS)
+        if unknown_domain:
+            raise ConfigError(
+                f"domain: unknown key(s) {unknown_domain}; allowed {sorted(_DOMAIN_KEYS)}"
+            )
+        if "shape" not in domain:
+            warnings.warn(
+                "domain.shape not given; defaulting to 'square' (will be required in 0.3.0)",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+            shape = _normalize_domain_shape("square")
+        else:
+            shape = _normalize_domain_shape(domain["shape"])
+        size = float(domain.get("size", 1.0))
         res = domain.get("mesh_resolution", [32, 32])
         if len(res) == 1:
             mesh_resolution = (int(res[0]), int(res[0]))
         elif len(res) == 2:
             mesh_resolution = (int(res[0]), int(res[1]))
         else:
-            raise ValueError(
+            raise ConfigError(
                 "mesh_resolution must have length 1 or 2 for the transverse plane"
             )
 
-        materials = load_materials(config["materials"])
-        rve = config.get("rve", config.get("field", {}))
+        material_entries = list(raw["materials"])
+        materials = load_materials(material_entries)
+        rve = dict(raw.get("rve", {}))
+        unknown_rve = sorted(set(rve) - _RVE_KEYS)
+        if unknown_rve:
+            raise ConfigError(
+                f"rve: unknown key(s) {unknown_rve}; allowed {sorted(_RVE_KEYS)}"
+            )
         matrix_material = str(rve["matrix_material"])
         fibre_material = str(rve["fibre_material"])
         if matrix_material not in materials or fibre_material not in materials:
-            raise ValueError(
+            raise ConfigError(
                 "matrix_material and fibre_material must name configured materials"
             )
 
@@ -93,16 +173,17 @@ class RVEProblem:
             vf = fibre_volume_fraction_from_radius(
                 shape=shape, domain_size=size, radius=radius
             )
+            check_fibre_volume_fraction(shape=shape, vf=vf)
         else:
-            raise ValueError("rve must specify fibre_volume_fraction or fibre_radius")
+            raise ConfigError("rve must specify fibre_volume_fraction or fibre_radius")
 
         if "centre" in rve:
             c = rve["centre"]
             centre = np.array([float(c[0]), float(c[1])], dtype=float)
 
-        solver = dict(config.get("solver", {}))
+        solver = SolverConfig.from_mapping(raw.get("solver"))
         default_cell = "triangle" if shape == "hexagon" else "quadrilateral"
-        cell_type = str(solver.get("cell_type", default_cell))
+        cell_type = solver.cell_type or default_cell
 
         return cls(
             domain_shape=shape,
@@ -115,8 +196,11 @@ class RVEProblem:
             fibre_radius=radius,
             fibre_volume_fraction=vf,
             centre_yz=centre,
-            periodic_tolerance=float(config.get("periodic_tolerance", 1e-8)),
+            periodic_tolerance=float(raw.get("periodic_tolerance", 1e-8)),
             solver=solver,
+            material_configs=tuple(
+                json.dumps(entry, sort_keys=True) for entry in material_entries
+            ),
         )
 
     @classmethod

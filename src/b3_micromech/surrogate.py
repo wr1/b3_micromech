@@ -148,12 +148,13 @@ def sample_uniform_hypercube(
     seed: int = 0,
 ) -> NDArray[np.float64]:
     """Draw ``n_samples`` feature vectors uniformly inside ``bounds``."""
-    if bounds.shape != (8, 2):
-        raise ValueError(f"bounds must have shape (8, 2), got {bounds.shape}")
+    if bounds.ndim != 2 or bounds.shape[1] != 2:
+        raise ValueError(f"bounds must have shape (n, 2), got {bounds.shape}")
+    n_features = bounds.shape[0]
     rng = np.random.default_rng(seed)
     lo = bounds[:, 0]
     hi = bounds[:, 1]
-    return rng.uniform(lo, hi, size=(n_samples, 8))
+    return rng.uniform(lo, hi, size=(n_samples, n_features))
 
 
 def relative_frobenius_error(

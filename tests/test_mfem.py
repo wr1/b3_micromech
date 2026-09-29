@@ -13,7 +13,7 @@ EXAMPLES = __import__("pathlib").Path(__file__).resolve().parents[1] / "examples
 
 def test_homogeneous_matrix_recovers_stiffness():
     cfg = {
-        "domain": {"size": 1.0, "mesh_resolution": [12, 12]},
+        "domain": {"shape": "square", "size": 1.0, "mesh_resolution": [12, 12]},
         "materials": [
             {
                 "name": "matrix",
@@ -47,7 +47,7 @@ def test_ud_rve_agrees_with_mori_tanaka_transverse():
     problem = RVEProblem.from_yaml(EXAMPLES / "ud_transverse.yaml")
     problem = RVEProblem.from_config(
         {
-            "domain": {"size": 1.0, "mesh_resolution": [48, 48]},
+            "domain": {"shape": "square", "size": 1.0, "mesh_resolution": [48, 48]},
             "materials": [
                 {
                     "name": "matrix",
@@ -80,5 +80,6 @@ def test_ud_rve_agrees_with_mori_tanaka_transverse():
     ec_fea = engineering_constants_transverse_iso(result.effective_stiffness)
     ec_mt = engineering_constants_transverse_iso(Cmt)
     assert abs(ec_fea["e_t"] - ec_mt["e_t"]) / ec_mt["e_t"] < 0.07
+    assert abs(ec_fea["g_lt"] - ec_mt["g_lt"]) / ec_mt["g_lt"] < 0.25
     assert ec_fea["e_l"] > 100e9
     assert np.all(np.linalg.eigvalsh(result.effective_stiffness) > 0)

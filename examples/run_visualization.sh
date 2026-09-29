@@ -9,5 +9,6 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 YAML="${1:-$ROOT/examples/ud_transverse.yaml}"
 OUT="${2:-$ROOT/results}"
 
-micromamba run -n b3-tex b3-micromech solve "$YAML" --out "$OUT"
-micromamba run -n b3-tex b3-micromech plot "$YAML" --out "$OUT/plots"
+RUN="${RUN:-uv run}"
+$RUN b3-micromech solve "$YAML" --out "$OUT"
+$RUN b3-micromech plot "$YAML" --out "$OUT/plots"

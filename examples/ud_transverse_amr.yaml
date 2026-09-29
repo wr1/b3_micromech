@@ -1,5 +1,6 @@
 # Square RVE with implicit per-GP material lookup and stiffness-jump AMR.
 domain:
+  shape: square
   size: 1.0
   mesh_resolution: [12, 12]
 

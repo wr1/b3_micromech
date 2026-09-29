@@ -8,6 +8,8 @@ from typing import Any
 import numpy as np
 from numpy.typing import NDArray
 
+from b3_micromech.config import ConfigError
+from b3_micromech.contract import ContractError
 from b3_micromech.tensors import (
     isotropic_stiffness,
     transverse_isotropic_stiffness,
@@ -154,13 +156,33 @@ class Material:
                 thermal_expansion=float(cfg.get("thermal_expansion", 0.0)),
             )
         if mtype == "transverse_isotropic":
+            e_t = float(cfg["e_t"])
+            has_nu = "nu_tt" in cfg
+            has_g = "g_tt" in cfg
+            if not has_nu and not has_g:
+                raise ContractError("transverse_isotropic requires nu_tt or g_tt")
+            if has_nu and has_g:
+                nu_tt = float(cfg["nu_tt"])
+                derived = e_t / (2.0 * float(cfg["g_tt"])) - 1.0
+                scale = max(abs(nu_tt), abs(derived), 1e-30)
+                if abs(nu_tt - derived) > 1e-9 * scale:
+                    raise ContractError(
+                        "nu_tt and g_tt disagree by more than 1e-9 relative"
+                    )
+            elif has_g:
+                g_tt = float(cfg["g_tt"])
+                if g_tt <= 0.0:
+                    raise ContractError(f"g_tt must be positive, got {g_tt}")
+                nu_tt = e_t / (2.0 * g_tt) - 1.0
+            else:
+                nu_tt = float(cfg["nu_tt"])
             return cls.transverse_isotropic(
                 name,
                 e_l=float(cfg["e_l"]),
-                e_t=float(cfg["e_t"]),
+                e_t=e_t,
                 g_lt=float(cfg["g_lt"]),
                 nu_lt=float(cfg["nu_lt"]),
-                nu_tt=float(cfg["nu_tt"]),
+                nu_tt=nu_tt,
                 k_l=float(cfg.get("k_l", 0.0)),
                 k_t=float(cfg.get("k_t", 0.0)),
                 alpha_l=float(cfg.get("alpha_l", 0.0)),
@@ -170,4 +192,10 @@ class Material:
 
 
 def load_materials(config: list[dict[str, Any]]) -> dict[str, Material]:
-    return {m.name: m for m in (Material.from_config(c) for c in config)}
+    materials: dict[str, Material] = {}
+    for cfg in config:
+        material = Material.from_config(cfg)
+        if material.name in materials:
+            raise ConfigError(f"duplicate material name {material.name!r}")
+        materials[material.name] = material
+    return materials

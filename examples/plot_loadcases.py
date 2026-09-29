@@ -19,16 +19,13 @@ Usage::
 from __future__ import annotations
 
 import argparse
-import sys
 from pathlib import Path
-
-REPO = Path(__file__).resolve().parents[1]
-if str(REPO / "src") not in sys.path:
-    sys.path.insert(0, str(REPO / "src"))
 
 from b3_micromech.plot import render_all_figures
 from b3_micromech.postprocess import solve_all_loadcases
 from b3_micromech.problem import RVEProblem
+
+REPO = Path(__file__).resolve().parents[1]
 
 
 def main() -> None:

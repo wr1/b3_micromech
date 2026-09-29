@@ -5,11 +5,12 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from b3_micromech.features import (
-    _build_mech_features_matrix,
-    build_feature_matrix,
-    constituent_thermal_properties,
+from b3_micromech.contract import (
+    FEATURE_NAMES,
+    THERMAL_FEATURE_NAMES,
+    Constituents,
 )
+from b3_micromech.features import _build_mech_features_matrix
 from b3_micromech.homogenize import (
     HomogenizationResult,
     effective_thermal_expansion_volume_average,
@@ -161,13 +162,11 @@ class TestFeatures:
             alpha_l=0.5e-6,
             alpha_t=12.0e-6,
         )
-        a_m, a_Lf, a_Tf, k_m = constituent_thermal_properties(  # type: ignore[arg-type]
-            matrix, fibre
-        )
-        assert a_m == pytest.approx(40.0e-6)
-        assert a_Lf == pytest.approx(0.5e-6)
-        assert a_Tf == pytest.approx(12.0e-6)
-        assert k_m == pytest.approx(0.25)
+        constituents = Constituents.from_materials(matrix, fibre)
+        assert constituents.alpha_m == pytest.approx(40.0e-6)
+        assert constituents.alpha_Lf == pytest.approx(0.5e-6)
+        assert constituents.alpha_Tf == pytest.approx(12.0e-6)
+        assert constituents.k_m == pytest.approx(0.25)
 
     def test_12_col_feature_matrix(self):
         vf = np.array([0.3, 0.5, 0.7], dtype=float)
@@ -190,10 +189,12 @@ class TestFeatures:
             alpha_l=0.5e-6,
             alpha_t=12.0e-6,
         )
-        feat = build_feature_matrix(vf, matrix=mat, fibre=fib)
+        constituents = Constituents.from_materials(mat, fib)
+        feat = constituents.feature_matrix(
+            vf, names=FEATURE_NAMES + THERMAL_FEATURE_NAMES
+        )
         assert feat.shape == (3, 12)
-        # first 8 = mechanical
-        mech = _build_mech_features_matrix(vf, matrix=mat, fibre=fib)
+        mech = constituents.feature_matrix(vf, names=FEATURE_NAMES)
         assert np.allclose(feat[:, :8], mech)
         # last 4 = thermal
         assert feat[0, 8] == pytest.approx(40.0e-6)  # alpha_m
@@ -227,7 +228,7 @@ class TestFeatures:
 
 def test_homogenization_result_has_thermal():
     cfg = {
-        "domain": {"size": 1.0, "mesh_resolution": [8, 8]},
+        "domain": {"shape": "square", "size": 1.0, "mesh_resolution": [8, 8]},
         "materials": [
             {
                 "name": "matrix",
@@ -279,7 +280,7 @@ def test_homogeneous_matrix_thermal_recovers():
     effective alpha must equal the constituent alpha."""
     alpha_val = 40.0e-6
     cfg = {
-        "domain": {"size": 1.0, "mesh_resolution": [8, 8]},
+        "domain": {"shape": "square", "size": 1.0, "mesh_resolution": [8, 8]},
         "materials": [
             {
                 "name": "a",
@@ -319,7 +320,7 @@ def test_homogeneous_matrix_thermal_recovers():
 def test_volume_average_formula():
     """Rule-of-mixtures volume average should match the helper function."""
     cfg = {
-        "domain": {"size": 1.0, "mesh_resolution": [4, 4]},
+        "domain": {"shape": "square", "size": 1.0, "mesh_resolution": [4, 4]},
         "materials": [
             {
                 "name": "matrix",
@@ -388,7 +389,7 @@ def test_homogenization_result_none_metadata_becomes_empty():
 def test_homogenization_result_has_conductivity():
     """HomogenizationResult should carry effective_conductivity (6, 6)."""
     cfg = {
-        "domain": {"size": 1.0, "mesh_resolution": [8, 8]},
+        "domain": {"shape": "square", "size": 1.0, "mesh_resolution": [8, 8]},
         "materials": [
             {
                 "name": "matrix",
@@ -431,7 +432,7 @@ def test_homogeneous_conductivity_recovers():
     """When both constituents are identical, effective k must equal constituent k."""
     k_val = 0.5
     cfg = {
-        "domain": {"size": 1.0, "mesh_resolution": [8, 8]},
+        "domain": {"shape": "square", "size": 1.0, "mesh_resolution": [8, 8]},
         "materials": [
             {
                 "name": "a",
@@ -479,7 +480,7 @@ def test_series_bound_transverse_conductivity():
     series_k = 1.0 / (vf / k_f + (1.0 - vf) / k_m)  # ≈ 0.4545
 
     cfg = {
-        "domain": {"size": 1.0, "mesh_resolution": [24, 24]},
+        "domain": {"shape": "square", "size": 1.0, "mesh_resolution": [24, 24]},
         "materials": [
             {
                 "name": "matrix",
@@ -530,7 +531,7 @@ def test_parallel_bound_axial_conductivity():
     parallel_k = vf * k_f + (1.0 - vf) * k_m  # = 5.125
 
     cfg = {
-        "domain": {"size": 1.0, "mesh_resolution": [8, 8]},
+        "domain": {"shape": "square", "size": 1.0, "mesh_resolution": [8, 8]},
         "materials": [
             {
                 "name": "matrix",
@@ -567,7 +568,7 @@ def test_parallel_bound_axial_conductivity():
 def test_transverse_conductivity_symmetry():
     """For UD RVE the effective transverse tensor should be isotropic in y-z plane."""
     cfg = {
-        "domain": {"size": 1.0, "mesh_resolution": [16, 16]},
+        "domain": {"shape": "square", "size": 1.0, "mesh_resolution": [16, 16]},
         "materials": [
             {
                 "name": "matrix",
@@ -617,7 +618,7 @@ def test_conductivity_converges_with_mesh():
     errors_fine = None
     for res in [8, 24]:
         cfg = {
-            "domain": {"size": 1.0, "mesh_resolution": [res, res]},
+            "domain": {"shape": "square", "size": 1.0, "mesh_resolution": [res, res]},
             "materials": [
                 {
                     "name": "matrix",
@@ -666,7 +667,7 @@ def test_diffusion_result_shape():
     from b3_micromech.backends.mfem_periodic_2d import effective_conductivity_tensor
 
     cfg = {
-        "domain": {"size": 1.0, "mesh_resolution": [4, 4]},
+        "domain": {"shape": "square", "size": 1.0, "mesh_resolution": [4, 4]},
         "materials": [
             {
                 "name": "matrix",
@@ -744,7 +745,7 @@ _FIBRE_CFG = {
 }
 
 _RVE_CFG_32 = {
-    "domain": {"size": 1.0, "mesh_resolution": [32, 32]},
+    "domain": {"shape": "square", "size": 1.0, "mesh_resolution": [32, 32]},
     "materials": [_MATRIX_CFG, _FIBRE_CFG],
     "rve": {
         "matrix_material": "matrix",
@@ -934,7 +935,7 @@ def test_homogeneous_cte_recovers():
     """When both constituents are identical, α_eff must equal constituent α."""
     alpha_val = 40.0e-6
     cfg = {
-        "domain": {"size": 1.0, "mesh_resolution": [16, 16]},
+        "domain": {"shape": "square", "size": 1.0, "mesh_resolution": [16, 16]},
         "materials": [
             {
                 "name": "a",
@@ -1000,12 +1001,13 @@ def test_transverse_cte_vf_monotonic():
     so alpha_yy should decrease monotonically.
     """
     base_cfg = {
-        "domain": {"size": 1.0, "mesh_resolution": [16, 16]},
+        "domain": {"shape": "square", "size": 1.0, "mesh_resolution": [16, 16]},
         "materials": [_MATRIX_CFG, _FIBRE_CFG],
         "solver": {"cell_type": "quadrilateral"},
     }
 
-    vf_values = [0.2, 0.4, 0.6, 0.8]
+    # 0.75 stays under the square packing limit (π/4 ≈ 0.785).
+    vf_values = [0.2, 0.4, 0.6, 0.75]
     alphas = []
 
     for test_vf in vf_values:

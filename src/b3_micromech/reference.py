@@ -154,6 +154,7 @@ def mori_tanaka_cylinder(
     vm = 1.0 - vf
 
     em, num = _engineering_constants_isotropic(matrix.stiffness)
+    gm = em / (2.0 * (1.0 + num))
     fibre_consts = engineering_constants_transverse_iso(fibre.stiffness)
     e_l_f = fibre_consts["e_l"]
     e_t_f = fibre_consts["e_t"]
@@ -168,7 +169,7 @@ def mori_tanaka_cylinder(
     eta_e = (e_t_f / em - 1.0) / (e_t_f / em + xi_e)
     e_t = em * (1.0 + xi_e * eta_e * vf) / (1.0 - eta_e * vf)
 
-    g_lt = em * (g_lt_f * (1.0 + vf) + em * vm) / (g_lt_f * vm + em * (1.0 + vf))
+    g_lt = gm * (g_lt_f * (1.0 + vf) + gm * vm) / (g_lt_f * vm + gm * (1.0 + vf))
     nu_tt = vf * nu_tt_f + vm * num
 
     return transverse_isotropic_stiffness(

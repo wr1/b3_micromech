@@ -1,5 +1,6 @@
 # Transverse UD RVE: circular fibre in epoxy matrix (SI units).
 domain:
+  shape: square
   size: 1.0
   mesh_resolution: [32, 32]
 

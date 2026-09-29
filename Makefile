@@ -1,7 +1,6 @@
-# Run examples with the b3-tex env (override if needed):
+# RUN is a command prefix. Override to use another environment:
 #   make solve RUN="micromamba run -n b3-micromech"
-#   make solve RUN="uv run b3-micromech"
-RUN ?= micromamba run -n b3-tex
+RUN ?= uv run
 OUT ?= results
 
 SQUARE_YAML = examples/ud_transverse.yaml

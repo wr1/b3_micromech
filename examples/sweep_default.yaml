@@ -1,4 +1,5 @@
 domain:
+  shape: square
   size: 1.0
   mesh_resolution: [24, 24]
 

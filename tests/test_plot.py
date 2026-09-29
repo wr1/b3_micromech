@@ -57,7 +57,7 @@ def test_render_all_figures(tmp_path):
 
     problem = RVEProblem.from_config(
         {
-            "domain": {"size": 1.0, "mesh_resolution": [12, 12]},
+            "domain": {"shape": "square", "size": 1.0, "mesh_resolution": [12, 12]},
             "materials": [
                 {
                     "name": "matrix",
@@ -98,7 +98,7 @@ def test_render_all_figures_includes_amr_plot(tmp_path):
 
     problem = RVEProblem.from_config(
         {
-            "domain": {"size": 1.0, "mesh_resolution": [8, 8]},
+            "domain": {"shape": "square", "size": 1.0, "mesh_resolution": [8, 8]},
             "materials": [
                 {
                     "name": "matrix",
