@@ -1,3 +1,5 @@
+import os
+
 import numpy as np
 import pytest
 
@@ -23,6 +25,19 @@ from b3_micromech.mesomech import (
 )
 from b3_micromech.problem import RVEProblem
 from b3_micromech.surrogate import StiffnessSurrogate
+
+
+def require_b3_tex():
+    """Import b3_tex, or skip only when B3_MICROMECH_ALLOW_NO_B3TEX=1."""
+    try:
+        import b3_tex
+    except ImportError as exc:
+        if os.environ.get("B3_MICROMECH_ALLOW_NO_B3TEX") == "1":
+            pytest.skip("b3_tex not installed (B3_MICROMECH_ALLOW_NO_B3TEX=1)")
+        raise RuntimeError(
+            "b3_tex is not installed. Set B3_MICROMECH_ALLOW_NO_B3TEX=1 to skip."
+        ) from exc
+    return b3_tex
 
 
 def _constituents():
@@ -229,8 +244,9 @@ def test_fea_surrogate_from_joblib_roundtrip(tmp_path):
     )
 
 
+@pytest.mark.b3tex
 def test_register_fea_micromech_with_b3_tex(tmp_path):
-    pytest.importorskip("b3_tex")
+    require_b3_tex()
     from b3_tex.materials import MicromechanicalMaterial
     from b3_tex.micromodels import get_micromodel
 
@@ -257,9 +273,10 @@ def test_register_fea_micromech_with_b3_tex(tmp_path):
     assert table.shape == (32, 6, 6)
 
 
+@pytest.mark.b3tex
 def test_build_feature_matrix_accepts_b3_tex_materials():
     """b3_tex Material has no thermal tensors — still yields (N, 8) features."""
-    pytest.importorskip("b3_tex")
+    require_b3_tex()
     from b3_tex.materials import Material as TexMaterial
 
     matrix = TexMaterial.isotropic("m", youngs_modulus=3e9, poisson_ratio=0.35)
@@ -298,11 +315,12 @@ def _synthetic_fea_like_for_physics(n: int = 36, seed: int = 0):
     return features, stiffness
 
 
+@pytest.mark.b3tex
 @pytest.mark.parametrize("kind", ["physics", "mf_gp"])
 def test_physics_kinds_register_and_lut_with_b3_tex(tmp_path, kind):
     """New residual surrogates load via mesomech and drive b3_tex LUTs."""
     pytest.importorskip("sklearn")
-    pytest.importorskip("b3_tex")
+    require_b3_tex()
     from b3_micromech.physics_surrogate import train_surrogate
     from b3_tex.materials import Material as TexMaterial
     from b3_tex.materials import MicromechanicalMaterial

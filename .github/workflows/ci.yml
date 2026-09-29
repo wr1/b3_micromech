@@ -15,27 +15,77 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.10", "3.12"]
+        python-version: ["3.11", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          enable-cache: true
+
+      - name: Sync locked environment
+        run: uv sync --locked --extra test --extra viz --extra sweep --extra surrogate
+
+      # b3_tex tests are the integration-b3tex job. Deselecting them is not a skip.
+      - name: Run tests
+        run: uv run pytest --cov --cov-report=term-missing -m "not b3tex"
+
+  import-smoke:
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
       - uses: actions/setup-python@v5
         with:
-          python-version: ${{ matrix.python-version }}
-          cache: pip
+          python-version: "3.12"
 
-      # PyMFEM (`mfem`) is a heavy source-only build, so it is omitted here.
-      # `--no-deps` skips it and `triangle`; tests marked `mfem` auto-skip
-      # (see tests/conftest.py) and `triangle`-dependent tests importorskip.
-      - name: Install package and test dependencies
+      - name: Root import does not load mfem or scipy
         run: |
-          python -m pip install --upgrade pip
-          pip install numpy pyyaml "treeparse>=0.2.5" \
-            matplotlib scikit-learn joblib pytest
-          pip install -e . --no-deps
+          python -m venv /tmp/smoke
+          /tmp/smoke/bin/pip install "numpy>=1.26" "pyyaml>=6"
+          PYTHONPATH=src /tmp/smoke/bin/python -c "import b3_micromech, sys; assert 'mfem' not in sys.modules and 'scipy' not in sys.modules"
 
-      - name: Run tests (mfem-marked tests skipped)
-        run: pytest -v
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.12"
+
+      - name: Build and check distributions
+        run: |
+          uv build
+          uvx twine check dist/*
+
+      # Out-of-tree import. PR 5 replaces this with the packaged-template smoke.
+      - name: Install the wheel outside the source tree
+        run: |
+          uv venv /tmp/wheel-venv
+          uv pip install --python /tmp/wheel-venv/bin/python dist/*.whl
+          cd /tmp
+          /tmp/wheel-venv/bin/python -c "import b3_micromech, pathlib; p = pathlib.Path(b3_micromech.__file__); assert 'b3_micromech' in p.parts; print(p)"
+
+  integration-b3tex:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.12"
+          enable-cache: true
+
+      - name: Sync locked environment
+        run: uv sync --locked --extra test --extra viz --extra sweep --extra surrogate
+
+      - name: Install pinned b3_tex
+        run: uv pip install "git+https://github.com/wr1/b3_tex@$(cat ci/b3_tex.ref)"
+
+      - name: Run b3_tex integration tests
+        run: uv run pytest tests/test_mesomech.py -m b3tex
 
   lint:
     runs-on: ubuntu-latest

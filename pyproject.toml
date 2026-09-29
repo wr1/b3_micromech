@@ -37,6 +37,7 @@ packages = ["src/b3_micromech"]
 testpaths = ["tests"]
 markers = [
   "mfem: requires a working PyMFEM (mfem) installation",
+  "b3tex: requires b3_tex; run by the integration CI job",
 ]
 filterwarnings = [
   "error::DeprecationWarning:b3_micromech.*",

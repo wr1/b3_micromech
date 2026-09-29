@@ -6,6 +6,11 @@
 - MIT `LICENSE`.
 - Committed `uv.lock`.
 - Dependabot for GitHub Actions, uv, and pre-commit.
+- CI runs the MFEM solver on Python 3.11 and 3.13 (`uv sync --locked`), plus an
+  import smoke test, a wheel install, and a `b3_tex` integration job pinned in
+  `ci/b3_tex.ref`.
+- Golden `C` / CTE / conductivity arrays for the three bundled RVEs, and a
+  schema-less physics joblib fixture.
 
 ### Changed
 - Requires Python >= 3.11.

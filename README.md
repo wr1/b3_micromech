@@ -168,14 +168,15 @@ Holdout diagnostics from the standard hypercube demo (`make demo-surrogate`):
 
 ```sh
 pip install -e ".[viz,sweep,surrogate,test]"
-pytest            # mfem-marked tests auto-skip if PyMFEM is unavailable
-pytest -m mfem    # the full FE suite
+pytest            # PyMFEM is required; B3_MICROMECH_ALLOW_NO_MFEM=1 skips those tests
+pytest -m mfem    # the FE suite only
 
 pip install pre-commit && pre-commit install   # ruff lint + format on commit
 ```
 
-CI (GitHub Actions) runs the fast suite on Python 3.10 and 3.12 (PyMFEM is omitted, so
-`mfem`-marked tests are skipped) plus a `pre-commit` lint/format check.
+CI (GitHub Actions) runs the suite on Python 3.11 and 3.13 with PyMFEM installed
+(`uv sync --locked`), plus an import smoke test, a wheel install, a `b3_tex`
+integration job pinned by `ci/b3_tex.ref`, and a `pre-commit` lint check.
 
 ## License
 
