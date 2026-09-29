@@ -134,6 +134,8 @@ def test_legacy_stiffness_sampling_maps_with_warning():
 def test_unknown_legacy_stiffness_sampling_raises():
     cfg = _base()
     cfg["solver"] = {"stiffness_sampling": "nope"}
-    with pytest.warns(DeprecationWarning, match="stiffness_sampling"):
-        with pytest.raises(ConfigError, match="nope"):
-            RVEProblem.from_config(cfg)
+    with (
+        pytest.warns(DeprecationWarning, match="stiffness_sampling"),
+        pytest.raises(ConfigError, match="nope"),
+    ):
+        RVEProblem.from_config(cfg)

@@ -9,15 +9,15 @@ from numpy.typing import NDArray
 
 from b3_micromech.mesh.build import build_mesh
 from b3_micromech.mesh.cartesian import element_cell_vertices_yz, element_material_ids
-from b3_micromech.quadrature import effective_stiffnesses_for_gauss_points
 from b3_micromech.periodic import origin_vertex_index, periodic_vertex_master_map
-from b3_micromech.result import LoadcaseResult
 from b3_micromech.problem import RVEProblem
+from b3_micromech.quadrature import effective_stiffnesses_for_gauss_points
+from b3_micromech.result import LoadcaseResult
 from b3_micromech.tensors import (
     grad_to_voigt_strain_plane_strain_x,
     macro_displacement_at_yz,
-    von_mises_voigt,
     voigt_b_matrix_plane_strain_x,
+    von_mises_voigt,
 )
 
 

@@ -28,7 +28,7 @@ import json
 import subprocess
 import sys
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -306,9 +306,10 @@ def _git_sha() -> str:
             capture_output=True,
             text=True,
             timeout=5,
+            check=False,
         )
         return out.stdout.strip() if out.returncode == 0 else "unknown"
-    except Exception:
+    except (OSError, subprocess.SubprocessError):
         return "unknown"
 
 
@@ -379,7 +380,7 @@ def _run(
                 flush=True,
             )
 
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 — one failed sample must not abort the sweep
             print(f"  -> FAILED: {exc}", flush=True)
             results.append(
                 {
@@ -418,7 +419,7 @@ def _run(
                 "design_space": str(design_path),
                 "design_space_version": "1",
                 "git_sha": _git_sha(),
-                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "timestamp": datetime.now(UTC).isoformat(),
                 "n_samples": len(samples),
                 "n_solved": len(results) - sum(1 for r in results if "error" in r),
                 "n_failed": sum(1 for r in results if "error" in r),

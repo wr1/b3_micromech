@@ -34,7 +34,7 @@ def _expand_hex_vf_sweep(spec: dict[str, Any]) -> list[float]:
         if "n_dense" in raw:
             kwargs["n_dense"] = int(raw["n_dense"])
     else:
-        raise ValueError(
+        raise TypeError(
             f"hex_vf_sweep must be a preset name or option dict, got {raw!r}"
         )
     if preset not in ("full", "compact", "high"):

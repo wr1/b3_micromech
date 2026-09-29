@@ -107,9 +107,8 @@ def _periodic_vertex_master_map_hex(
                 best_dist = dist
                 best_edge = edge
                 best_param = param
-        if best_edge >= 0:
-            if best_param > tol and best_param < 1.0 - tol:
-                edge_vertices[best_edge].append((v, best_param))
+        if best_edge >= 0 and tol < best_param < 1.0 - tol:
+            edge_vertices[best_edge].append((v, best_param))
 
     def _pick_master(vertices: list[int]) -> int:
         return min(vertices)

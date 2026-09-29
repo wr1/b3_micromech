@@ -2,12 +2,11 @@
 
 from __future__ import annotations
 
+import warnings
 from typing import TYPE_CHECKING, Any
 
 import numpy as np
 from numpy.typing import NDArray
-
-import warnings
 
 from b3_micromech.config import SolverConfig
 from b3_micromech.field import sample_material_ids

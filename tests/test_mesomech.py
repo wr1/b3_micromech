@@ -133,7 +133,6 @@ def test_lut_cache_key_changes_with_rve_or_constituents():
 
 
 def test_disk_cache_roundtrip(tmp_path):
-    matrix, fibre = _constituents()
     vf = np.linspace(0.4, 0.7, 5)
     stiffness = np.stack([np.eye(6) * (i + 1) for i in range(5)])
     cache_path = tmp_path / "entry.npz"
@@ -366,10 +365,10 @@ def test_physics_kinds_register_and_lut_with_b3_tex(tmp_path, kind):
     """New residual surrogates load via mesomech and drive b3_tex LUTs."""
     pytest.importorskip("sklearn")
     require_b3_tex()
-    from b3_micromech.physics_surrogate import train_surrogate
-    from b3_tex.materials import Material as TexMaterial
-    from b3_tex.materials import MicromechanicalMaterial
+    from b3_tex.materials import Material as TexMaterial, MicromechanicalMaterial
     from b3_tex.micromodels import SurrogateModel, get_micromodel, register_micromodel
+
+    from b3_micromech.physics_surrogate import train_surrogate
 
     features, stiffness = _synthetic_fea_like_for_physics(n=36, seed=7)
     train_kw: dict = {}

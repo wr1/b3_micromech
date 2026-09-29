@@ -8,9 +8,9 @@ import numpy as np
 from numpy.typing import NDArray
 
 from b3_micromech.backends.mfem_periodic_2d import (
+    effective_conductivity_tensor,
     solve_periodic_plane_strain,
     solve_thermal_loadcase,
-    effective_conductivity_tensor,
 )
 from b3_micromech.contract import FEATURE_NAMES, Constituents
 from b3_micromech.problem import RVEProblem

@@ -148,19 +148,21 @@ def test_material_g_tt_derives_nu_tt_and_disagreement_raises():
 
 @pytest.mark.filterwarnings("always::DeprecationWarning:b3_micromech")
 def test_partial_thermal_feature_matrix_raises():
-    with pytest.warns(DeprecationWarning, match="build_feature_matrix"):
-        with pytest.raises(ContractError, match="thermal"):
-            build_feature_matrix(
-                np.array([0.5]),
-                E_m=3e9,
-                nu_m=0.35,
-                E_Lf=230e9,
-                E_Tf=15e9,
-                G_LTf=15e9,
-                nu_LTf=0.2,
-                G_TTf=6e9,
-                alpha_m=1e-5,
-            )
+    with (
+        pytest.warns(DeprecationWarning, match="build_feature_matrix"),
+        pytest.raises(ContractError, match="thermal"),
+    ):
+        build_feature_matrix(
+            np.array([0.5]),
+            E_m=3e9,
+            nu_m=0.35,
+            E_Lf=230e9,
+            E_Tf=15e9,
+            G_LTf=15e9,
+            nu_LTf=0.2,
+            G_TTf=6e9,
+            alpha_m=1e-5,
+        )
 
 
 def test_round_trip_config_uses_named_materials():

@@ -11,7 +11,6 @@ from pathlib import Path
 
 import yaml
 
-
 # ---------------------------------------------------------------------------
 # Schema definition
 # ---------------------------------------------------------------------------
@@ -120,11 +119,10 @@ def validate_scalar(value, spec, path):
                 f"{path}: expected numeric value, got {type(value).__name__}"
             )
 
-        if "valid" in spec:
-            if numeric_val not in spec["valid"]:
-                raise ValidationError(
-                    f"{path}: value {value!r} not in allowed {spec['valid']}"
-                )
+        if "valid" in spec and numeric_val not in spec["valid"]:
+            raise ValidationError(
+                f"{path}: value {value!r} not in allowed {spec['valid']}"
+            )
 
         if "valid_range" in spec:
             lo, hi = spec["valid_range"]
@@ -136,11 +134,10 @@ def validate_scalar(value, spec, path):
     elif spec["type"] is str:
         if not isinstance(value, str):
             raise ValidationError(f"{path}: expected str, got {type(value).__name__}")
-        if "valid" in spec:
-            if value not in spec["valid"]:
-                raise ValidationError(
-                    f"{path}: value {value!r} not in allowed {spec['valid']}"
-                )
+        if "valid" in spec and value not in spec["valid"]:
+            raise ValidationError(
+                f"{path}: value {value!r} not in allowed {spec['valid']}"
+            )
 
 
 def validate_list(key, value, spec, path_prefix):

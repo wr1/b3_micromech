@@ -6,8 +6,8 @@ from b3_micromech.mesh.cartesian import (
 )
 
 __all__ = [
-    "build_mesh",
     "build_cartesian_mesh",
+    "build_mesh",
     "element_material_ids",
     "mesh_vertices_and_cells",
 ]

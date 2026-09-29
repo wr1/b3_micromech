@@ -22,9 +22,10 @@ learn. See package ``SKILL.md`` / README surrogate sections.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Callable, Literal
+from typing import Any, Literal
 
 import numpy as np
 from numpy.typing import NDArray
@@ -313,7 +314,7 @@ class MultiFidelityGPSurrogate:
         **_ignored: Any,
     ) -> MultiFidelityGPSurrogate:
         from sklearn.gaussian_process import GaussianProcessRegressor
-        from sklearn.gaussian_process.kernels import ConstantKernel, RBF, WhiteKernel
+        from sklearn.gaussian_process.kernels import RBF, ConstantKernel, WhiteKernel
         from sklearn.preprocessing import StandardScaler
 
         x = np.asarray(features, dtype=float)

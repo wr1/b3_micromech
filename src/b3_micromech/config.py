@@ -7,8 +7,9 @@ material sampling is ``local_cloud`` at resolution 6.
 from __future__ import annotations
 
 import warnings
+from collections.abc import Mapping
 from dataclasses import asdict, dataclass, field, fields
-from typing import Any, Literal, Mapping
+from typing import Any, Literal
 
 SamplingStrategy = Literal["exact", "cell_constant", "local_cloud"]
 AmrMarker = Literal["stiffness_jump", "heterogeneity", "combined"]

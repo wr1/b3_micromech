@@ -3,11 +3,10 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any, Protocol
 
 import numpy as np
 from numpy.typing import NDArray
-
-from typing import Any, Protocol
 
 from b3_micromech.contract import FEATURE_NAMES
 from b3_micromech.surrogate import engineering_constants_batch

@@ -10,9 +10,9 @@ from b3_micromech.geometry import (
 )
 from b3_micromech.surrogate import (
     StiffnessSurrogate,
-    evaluate_training_holdout,
     combined_emphasis_sample_weights,
     e2_emphasis_sample_weights,
+    evaluate_training_holdout,
     stiffness_to_targets,
     targets_to_stiffness,
     transform_features_for_regression,

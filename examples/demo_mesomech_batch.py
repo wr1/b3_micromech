@@ -45,13 +45,14 @@ def main() -> None:
     pytest.importorskip("sklearn")
     pytest.importorskip("b3_tex")
 
+    from b3_tex.materials import MicromechanicalMaterial
+    from b3_tex.micromodels import get_micromodel
+
     from b3_micromech.mesomech import (
         constituents_from_yaml,
         predict_stiffness_batch,
         register_fea_micromech,
     )
-    from b3_tex.materials import MicromechanicalMaterial
-    from b3_tex.micromodels import get_micromodel
 
     surrogate_path = args.model if args.model.is_file() else None
     if surrogate_path is None:

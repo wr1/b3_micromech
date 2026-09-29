@@ -1,13 +1,13 @@
 import numpy as np
 import pytest
 
+from b3_micromech.geometry import hex_vf_sweep_values
 from b3_micromech.surrogate_response import (
     DEFAULT_THREE_AXIS_RESPONSE,
     SURROGATE_FEATURE_INDEX,
     build_structured_response_grid,
     midpoint_feature_vector,
 )
-from b3_micromech.geometry import hex_vf_sweep_values
 from b3_micromech.sweep import count_sweep_points, varying_sweep_parameters
 
 

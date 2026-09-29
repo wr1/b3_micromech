@@ -5,13 +5,9 @@ from pathlib import Path
 import numpy as np
 from treeparse import argument, cli, command, option
 
-from b3_micromech.homogenize import homogenize, surrogate_features
-from b3_micromech.plot import render_all_figures
-from b3_micromech.postprocess import solve_all_loadcases
-from b3_micromech.problem import RVEProblem
-from b3_micromech.reference import chamis_ud_stiffness, mori_tanaka_cylinder
 from b3_micromech.contract import Constituents
 from b3_micromech.features import _names_for, features_out_of_bounds
+from b3_micromech.homogenize import homogenize, surrogate_features
 from b3_micromech.mesomech import (
     constituents_from_yaml,
     predict_stiffness_batch,
@@ -24,6 +20,10 @@ from b3_micromech.physics_surrogate import (
     load_surrogate,
     train_surrogate_from_dataset,
 )
+from b3_micromech.plot import render_all_figures
+from b3_micromech.postprocess import solve_all_loadcases
+from b3_micromech.problem import RVEProblem
+from b3_micromech.reference import chamis_ud_stiffness, mori_tanaka_cylinder
 from b3_micromech.surrogate import (
     evaluate_training_holdout,
     predict_random_hypercube_samples,
@@ -64,7 +64,7 @@ def _reference_cmd(config: str) -> None:
         ec = engineering_constants_transverse_iso(C)
         print(f"{label} engineering constants (axis 1 = fibre):")
         for k, v in ec.items():
-            if k.startswith("e_") or k.startswith("g_"):
+            if k.startswith(("e_", "g_")):
                 print(f"  {k} = {v / 1e9:.4f} GPa")
             else:
                 print(f"  {k} = {v:.4f}")

@@ -5,7 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -87,7 +87,7 @@ def save_lut_cache(
     if metadata is not None:
         meta = dict(metadata)
         meta.setdefault("version", CACHE_VERSION)
-        meta.setdefault("saved_at", datetime.now(timezone.utc).isoformat())
+        meta.setdefault("saved_at", datetime.now(UTC).isoformat())
         path.with_suffix(".meta.json").write_text(
             json.dumps(meta, indent=2),
             encoding="utf-8",

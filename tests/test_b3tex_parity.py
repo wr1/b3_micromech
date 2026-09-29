@@ -94,24 +94,30 @@ def test_tensors_chamis_mori_tanaka_and_features_match_b3_tex():
             rtol=1e-12,
             atol=0.0,
         )
-        ortho = dict(
-            e1=e_l,
-            e2=e_t,
-            e3=e_t,
-            nu12=nu_lt,
-            nu13=nu_lt,
-            nu23=nu_tt,
-            g12=g_lt,
-            g13=g_lt,
-            g23=e_t / (2.0 * (1.0 + nu_tt)),
-        )
+        ortho = {
+            "e1": e_l,
+            "e2": e_t,
+            "e3": e_t,
+            "nu12": nu_lt,
+            "nu13": nu_lt,
+            "nu23": nu_tt,
+            "g12": g_lt,
+            "g13": g_lt,
+            "g23": e_t / (2.0 * (1.0 + nu_tt)),
+        }
         np.testing.assert_allclose(
             orthotropic_stiffness(**ortho),
             tex_orthotropic(**ortho),
             rtol=1e-12,
             atol=0.0,
         )
-        ti_kwargs = dict(e_l=e_l, e_t=e_t, g_lt=g_lt, nu_lt=nu_lt, nu_tt=nu_tt)
+        ti_kwargs = {
+            "e_l": e_l,
+            "e_t": e_t,
+            "g_lt": g_lt,
+            "nu_lt": nu_lt,
+            "nu_tt": nu_tt,
+        }
         ours_ti = transverse_isotropic_stiffness(**ti_kwargs)
         theirs_ti = tex_ti(**ti_kwargs)
         np.testing.assert_allclose(ours_ti, theirs_ti, rtol=1e-12, atol=0.0)
