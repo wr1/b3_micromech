@@ -4,7 +4,7 @@
 # This YAML defines the full parameter space for surrogate training across
 # constituent materials, fibre volume fractions, and weave architectures.
 #
-# Source: Phase 1 of surrogate-program.md (b3_micromech notes/plans/)
+# Source: surrogate program phase 1 (internal notes)
 # Created: 2026-07-07
 #
 # Units convention:

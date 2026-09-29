@@ -89,8 +89,7 @@ def _solve_cmd(config: str, out: str, plot: bool, plot_scale: float) -> None:
     )
     print(f"wrote {out_dir / 'C_eff.npz'}")
     if plot:
-        scale = None if plot_scale < 0 else plot_scale
-        _plot_cmd(config, str(out_dir / "plots"), scale)
+        _plot_cmd(config, str(out_dir / "plots"), plot_scale)
 
 
 def _plot_cmd(config: str, out: str, scale: float) -> None:
@@ -243,8 +242,7 @@ _app = cli(
                 ),
                 option(
                     flags=["--plot", "-p"],
-                    arg_type=bool,
-                    default=False,
+                    flag=True,
                     help="Also write loadcase deformation plots under <out>/plots/.",
                 ),
                 option(
@@ -450,8 +448,7 @@ _app = cli(
                 ),
                 option(
                     flags=["--no-disk-cache"],
-                    arg_type=bool,
-                    default=False,
+                    flag=True,
                     help="Disable disk LUT cache.",
                 ),
             ],

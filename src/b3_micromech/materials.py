@@ -8,6 +8,7 @@ from typing import Any
 import numpy as np
 from numpy.typing import NDArray
 
+from b3_micromech.config import ConfigError
 from b3_micromech.tensors import (
     isotropic_stiffness,
     transverse_isotropic_stiffness,
@@ -170,4 +171,10 @@ class Material:
 
 
 def load_materials(config: list[dict[str, Any]]) -> dict[str, Material]:
-    return {m.name: m for m in (Material.from_config(c) for c in config)}
+    materials: dict[str, Material] = {}
+    for cfg in config:
+        material = Material.from_config(cfg)
+        if material.name in materials:
+            raise ConfigError(f"duplicate material name {material.name!r}")
+        materials[material.name] = material
+    return materials

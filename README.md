@@ -23,9 +23,9 @@ micromamba activate b3-micromech
 pip install -e ".[viz,sweep,surrogate,test]"
 ```
 
-`mfem` (PyMFEM) and `triangle` are core dependencies installed with the package. The
-optional extras add plotting (`viz`), parallel sweeps (`sweep`), the surrogate stack
-(`surrogate`), and the test runner (`test`).
+PyMFEM (`mfem`), SciPy, and `triangle` are core dependencies installed with the
+package. The optional extras add plotting (`viz`), parallel sweeps (`sweep`), the
+surrogate stack (`surrogate`), and the test runner (`test`).
 
 ## Usage
 
@@ -53,8 +53,8 @@ b3-micromech train-surrogate   results/dataset.npz -o results/mlp.joblib --kind 
 b3-micromech predict-surrogate results/surrogate_model.joblib
 ```
 
-A `Makefile` wraps the common workflows (`make help` lists targets); it defaults to the
-`b3-tex` env — override with `make solve RUN="micromamba run -n b3-micromech"`.
+A `Makefile` wraps the common workflows (`make help` lists targets); it defaults to
+`uv run`. Override with `make solve RUN="micromamba run -n b3-micromech"`.
 
 ### Geometry
 

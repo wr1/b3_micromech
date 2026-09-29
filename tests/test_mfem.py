@@ -80,5 +80,6 @@ def test_ud_rve_agrees_with_mori_tanaka_transverse():
     ec_fea = engineering_constants_transverse_iso(result.effective_stiffness)
     ec_mt = engineering_constants_transverse_iso(Cmt)
     assert abs(ec_fea["e_t"] - ec_mt["e_t"]) / ec_mt["e_t"] < 0.07
+    assert abs(ec_fea["g_lt"] - ec_mt["g_lt"]) / ec_mt["g_lt"] < 0.25
     assert ec_fea["e_l"] > 100e9
     assert np.all(np.linalg.eigvalsh(result.effective_stiffness) > 0)

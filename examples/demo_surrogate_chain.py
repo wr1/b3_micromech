@@ -35,14 +35,9 @@ from __future__ import annotations
 
 import argparse
 import json
-import sys
 from pathlib import Path
 
 import numpy as np
-
-REPO = Path(__file__).resolve().parents[1]
-if str(REPO / "src") not in sys.path:
-    sys.path.insert(0, str(REPO / "src"))
 
 from b3_micromech.export import load_dataset, save_dataset
 from b3_micromech.geometry import max_fibre_volume_fraction
@@ -58,6 +53,8 @@ from b3_micromech.surrogate import (
 )
 from b3_micromech.sweep import problem_from_sweep_point, run_sweep
 from b3_micromech.tensors import engineering_constants_transverse_iso
+
+REPO = Path(__file__).resolve().parents[1]
 
 DEFAULT_SWEEP_YAML = REPO / "examples" / "sweep_hex_hypercube.yaml"
 
