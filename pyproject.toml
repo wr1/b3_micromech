@@ -15,7 +15,7 @@ dependencies = [
   "numpy>=1.26",
   "scipy>=1.11",
   "pyyaml>=6.0",
-  "treeparse>=0.3,<0.4",
+  "treeparse>=0.3,<0.5",
   "mfem>=4.8,<4.11",
   "triangle>=20250106",
 ]
